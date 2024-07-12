@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as path from "path";
 import proj4 from "proj4";
 import { Feature, FeatureCollection, GeometryObject } from "geojson";
 
@@ -41,23 +42,47 @@ const transformCoordinates = (geometry: GeometryObject): GeometryObject => {
     return geometry;
 };
 
-// Fetch command-line arguments for input and output files
-const [, , inputFilePath, outputFilePath] = process.argv;
+// Fetch command-line arguments for input and output directories
+const [, , inputDir, outputDir] = process.argv;
 
-if (!inputFilePath || !outputFilePath) {
-    console.error("Please provide input and output file paths.");
+if (!inputDir || !outputDir) {
+    console.error("Please provide input and output directories.");
     process.exit(1);
 }
 
-// Load the GeoJSON file
-const geojson_data: FeatureCollection = JSON.parse(fs.readFileSync(inputFilePath, 'utf8'));
+// Check if input and output directories exist
+if (!fs.existsSync(inputDir)) {
+    console.error(`Input directory does not exist: ${inputDir}`);
+    process.exit(1);
+}
 
-// Transform the geometries
-geojson_data.features.forEach((feature: Feature) => {
-    feature.geometry = transformCoordinates(feature.geometry);
+if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+}
+
+// Read all JSON files in the input directory
+const files = fs.readdirSync(inputDir).filter(file => file.endsWith('.json'));
+
+if (files.length === 0) {
+    console.error(`No JSON files found in the directory: ${inputDir}`);
+    process.exit(1);
+}
+
+// Process each JSON file
+files.forEach(file => {
+    const inputFilePath = path.join(inputDir, file);
+    const outputFilePath = path.join(outputDir, file);
+
+    // Load the GeoJSON file
+    const geojson_data: FeatureCollection = JSON.parse(fs.readFileSync(inputFilePath, 'utf8'));
+
+    // Transform the geometries
+    geojson_data.features.forEach((feature: Feature) => {
+        feature.geometry = transformCoordinates(feature.geometry);
+    });
+
+    // Save the transformed GeoJSON to the output file
+    fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data, null, 2));
+
+    console.log(`Coordinate transformation complete for ${file}. Saved to ${outputFilePath}.`);
 });
-
-// Save the transformed GeoJSON to a new file
-fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data));
-
-console.log(`Coordinate transformation complete. Saved to ${outputFilePath}.`);

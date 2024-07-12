@@ -4,6 +4,10 @@
 
 [Val.se - Kartor över valdistrikt i val 2024](https://www.val.se/valresultat/europaparlamentet/2024/radata-och-statistik.html#kartor)
 
+## Election results
+
+cd into the directory where you want to download the data. For example: `public/data/election-results`.
+
 ```shell
 # Download the election results from val.se
 curl -o EU-val_2024_slutlig_00_E.zip https://resultat.val.se/resultatfiler/euval2024/s/e/EU-val_2024_slutlig_00_E.zip
@@ -21,4 +25,13 @@ openssl x509 -pubkey -noout -in val-sign-crt.pem > public_key.pem
 for json_file in *.json; do sign_file="${json_file%.json}_sign.sha256"; [ -f "$sign_file" ] && openssl dgst -sha256 -verify public_key.pem -signature "$sign_file" "$json_file"; done
 
 # Manual check: openssl dgst -sha256 -verify public_key.pem -signature EU-val_2024_slutlig_rostfordelning_00_E_sign.sha256 EU-val_2024_slutlig_rostfordelning_00_E.json
+```
+
+The data is now downloaded and verified. You can now use the data in your project.
+
+## District maps
+
+```shell
+npm run download-districts
+npm run transform-geojson
 ```
