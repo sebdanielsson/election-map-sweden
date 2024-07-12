@@ -16,6 +16,12 @@
   }
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -24,6 +30,23 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
+}
+
+.borderless-table {
+  border-collapse: collapse;
+}
+
+.borderless-table td:not(:last-child) {
+  padding-right: 2rem;
+}
+
+.borderless-table td, .borderless-table th {
+  padding: 0px;
+  text-align: left;
+}
+
+.borderless-table th {
+  font-weight: bold;
 }
 
 @layer utilities {
