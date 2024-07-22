@@ -32,12 +32,29 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+.mapboxgl-popup-content {
+  background-color: rgb(31 41 55 / 0.5) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgb(255 255 255 / 1);
+  padding: 0.25rem !important;
+  margin-bottom: 1.5rem;
+}
+
+.mapboxgl-popup-tip {
+  display: none;
+}
+
 .borderless-table {
   border-collapse: collapse;
 }
 
 .borderless-table td:not(:last-child) {
-  padding-right: 2rem;
+  padding-right: 1rem;
+}
+
+.borderless-table th:not(:last-child) {
+  padding-right: 1rem;
 }
 
 .borderless-table td, .borderless-table th {
@@ -47,6 +64,7 @@ body {
 
 .borderless-table th {
   font-weight: bold;
+  font-size: 1rem;
 }
 
 @layer utilities {
