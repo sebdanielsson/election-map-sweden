@@ -3,14 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { Feature, FeatureCollection } from 'geojson';
-import { ShapeJson, Valdistrikt, Rostfordelning, RosterPaverkaMandat, PartiRoster, ListRoster, Personrost, RosterOvrigaPartier, RosterEjPaverkaMandat, VotingDistrictProperties } from './electionDataInterfaces';
+import { Rostfordelning, Mandatfordelning, PartiRoster, Valdistrikt, RosterPaverkaMandat, ListRoster, Personrost, RosterOvrigaPartier, RosterEjPaverkaMandat, VotingDistrictProperties } from './electionDataInterfaces';
 
-const getDistrictResults = (electionData: ShapeJson, districtId: string | null): PartiRoster[] | null => {
+const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: string | null): PartiRoster[] | null => {
   if (!districtId) return null;
 
-  const districtData = electionData.valdistrikt.find((d) => d.valdistriktskod === districtId);
+  const districtData = rostfordelningData.valdistrikt.find((d) => d.valdistriktskod === districtId);
   if (!districtData) return null;
   return districtData.rostfordelning.rosterPaverkaMandat.partiRoster;
+};
+
+const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
+  const response = await fetch('/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json');
+  if (!response.ok) throw new Error('Network response was not ok');
+  return response.json();
 };
 
 const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
@@ -64,7 +70,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   return featureCollections;
 };
 
-const fetchElectionData = async (): Promise<ShapeJson> => {
+const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   const response = await fetch('/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json');
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
@@ -80,8 +86,9 @@ const closeSidebar = () => {
 export default function Home() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
+  const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<mapboxgl.Map | null>(null);
-  const [electionData, setElectionData] = useState<ShapeJson | null>(null);
+  const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -158,8 +165,13 @@ export default function Home() {
             },
           });
 
-          const fetchedElectionData = await fetchElectionData();
-          setElectionData(fetchedElectionData);
+          const [fetchedRostfordelningData, fetchedNationalResultsData] = await Promise.all([
+            fetchRostfordelningData(),
+            fetchNationalResultsData()
+          ]);
+
+          setRostfordelningData(fetchedRostfordelningData);
+          setNationalResults(fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster);
           setLoading(false);
 
           map.on('click', async (e) => {
@@ -173,8 +185,8 @@ export default function Home() {
                 const feature = features[0];
                 setSelectedDistrict(feature.properties as VotingDistrictProperties);
 
-                if (feature.properties && fetchedElectionData) {
-                  const results = getDistrictResults(fetchedElectionData, feature.properties.Lkfv);
+                if (feature.properties && fetchedRostfordelningData) {
+                  const results = getDistrictResults(fetchedRostfordelningData, feature.properties.Lkfv);
                   setDistrictResults(results);
                 } else {
                   console.error('No properties found for the selected district');
@@ -194,12 +206,32 @@ export default function Home() {
             }
           });
 
-          map.on('mouseenter', () => {
-            map.getCanvas().style.cursor = 'pointer';
+          const tooltip = new mapboxgl.Popup({
+            closeButton: false,
+            closeOnClick: false
           });
 
-          map.on('mouseleave', () => {
-            map.getCanvas().style.cursor = '';
+          map.on('mousemove', (e) => {
+            for (const [index] of featureCollections.entries()) {
+              const sourceId = `voting-districts-${index}-fill`;
+              const features = map.queryRenderedFeatures(e.point, {
+                layers: [sourceId],
+              });
+
+              if (features.length) {
+                const feature = features[0];
+                const districtName = feature.properties?.Vdnamn;
+
+                if (districtName) {
+                  tooltip
+                    .setLngLat(e.lngLat)
+                    .setHTML(`<strong>${districtName}</strong>`)
+                    .addTo(map);
+                }
+                return;
+              }
+            }
+            tooltip.remove();
           });
         });
 
@@ -212,12 +244,18 @@ export default function Home() {
     loadDataAndSetUpMap();
   }, [map]);
 
-  const renderDistrictResults = (results: PartiRoster[] | null) => {
+  const renderDistrictResults = (results: PartiRoster[] | null, nationalResults: PartiRoster[] | null) => {
     if (!results) return null;
+
     const others = results.filter((p) => p.andelRoster !== null && p.andelRoster < 4);
     const majorParties = results.filter((p) => p.andelRoster !== null && p.andelRoster >= 4);
 
     const othersTotal = others.reduce((sum, party) => sum + (party.andelRoster || 0), 0);
+
+    const getNationalResult = (partikod: string) => {
+      if (!nationalResults) return null;
+      return nationalResults.find((p) => p.partikod === partikod)?.andelRoster;
+    };
 
     return (
       <div>
@@ -225,20 +263,26 @@ export default function Home() {
           <thead>
             <tr>
               <th>Party</th>
-              <th>%</th>
+              <th>% District</th>
+              <th>% National</th>
             </tr>
           </thead>
           <tbody>
-            {majorParties.map((party) => (
-              <tr key={party.partikod}>
-                <td>{party.partiforkortning}</td>
-                <td>{party.andelRoster?.toFixed(2)}</td>
-              </tr>
-            ))}
+            {majorParties.map((party) => {
+              const nationalRes = party.partikod ? getNationalResult(party.partikod) : null;
+              return (
+                <tr key={party.partikod}>
+                  <td>{party.partiforkortning}</td>
+                  <td>{party.andelRoster?.toFixed(2)}</td>
+                  <td>{nationalRes ? nationalRes.toFixed(2) : 'N/A'}</td>
+                </tr>
+              );
+            })}
             {others.length > 0 && (
               <tr>
                 <td>Others</td>
                 <td>{othersTotal.toFixed(2)}</td>
+                <td>N/A</td>
               </tr>
             )}
           </tbody>
@@ -267,12 +311,12 @@ export default function Home() {
           {selectedDistrict ? (
             <div>
               <div className="flex flex-row justify-between relative">
-                <h2 className="text-lg font-bold text-slate-300">{selectedDistrict.Vdnamn} ({selectedDistrict.Lkfv})</h2>
+                <h2 className="text-lg font-bold text-slate-300">{selectedDistrict.Vdnamn}</h2>
                 <button onClick={closeSidebar} className="text-white h-6">
                   <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z" /></svg>
                 </button>
               </div>
-              {renderDistrictResults(districtResults)}
+              {renderDistrictResults(districtResults, nationalResults)}
             </div>
           ) : (
             <div>
