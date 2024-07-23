@@ -14,7 +14,7 @@ const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: stri
 };
 
 const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
-  const response = await fetch('/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json');
+  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`);
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
 };
@@ -48,7 +48,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
   for (const url of fileUrls) {
     try {
-      const response = await fetch(`/data/districts/EPSG4326/${url}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
 
@@ -71,7 +71,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 };
 
 const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
-  const response = await fetch('/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json');
+  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`);
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
 };

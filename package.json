@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dotenvx": "dotenvx",
+    "dev": "dotenvx run -- next dev",
+    "build": "dotenvx run -- next build",
+    "start": "dotenvx run -- next start",
     "lint": "next lint",
     "download-districts": "tsc --esModuleInterop scripts/downloadDistricts.ts && node scripts/downloadDistricts.js temp/districts/EPSG3006",
     "transform-geojson": "tsc --esModuleInterop scripts/transformGeojson.ts && node scripts/transformGeojson.js temp/districts/EPSG3006 public/data/districts"
   },
   "dependencies": {
+    "@dotenvx/dotenvx": "^1.6.4",
     "@types/unzipper": "^0.10.9",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
