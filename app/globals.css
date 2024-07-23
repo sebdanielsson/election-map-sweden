@@ -38,7 +38,8 @@ body {
   -webkit-backdrop-filter: blur(12px);
   color: rgb(255 255 255 / 1);
   padding: 0.25rem !important;
-  margin-bottom: 1.5rem;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .mapboxgl-popup-tip {
