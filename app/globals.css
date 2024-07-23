@@ -46,26 +46,27 @@ body {
   display: none;
 }
 
-.borderless-table {
-  border-collapse: collapse;
-}
-
 .borderless-table td:not(:last-child) {
-  padding-right: 1rem;
+  padding-right: 1.5rem;
 }
 
 .borderless-table th:not(:last-child) {
-  padding-right: 1rem;
+  padding-right: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .borderless-table td:not(:last-child) {
+    padding-right: 0.75rem;
+  }
+
+  .borderless-table th:not(:last-child) {
+    padding-right: 0.75rem;
+  }
 }
 
 .borderless-table td, .borderless-table th {
   padding: 0px;
   text-align: left;
-}
-
-.borderless-table th {
-  font-weight: bold;
-  font-size: 1rem;
 }
 
 @layer utilities {

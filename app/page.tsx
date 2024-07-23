@@ -258,36 +258,34 @@ export default function Home() {
     };
 
     return (
-      <div>
-        <table className='borderless-table border-collapse'>
-          <thead>
-            <tr>
-              <th>Party</th>
-              <th>% District</th>
-              <th>% National</th>
-            </tr>
-          </thead>
-          <tbody>
-            {majorParties.map((party) => {
-              const nationalRes = party.partikod ? getNationalResult(party.partikod) : null;
-              return (
-                <tr key={party.partikod}>
-                  <td>{party.partiforkortning}</td>
-                  <td>{party.andelRoster?.toFixed(2)}</td>
-                  <td>{nationalRes ? nationalRes.toFixed(2) : 'N/A'}</td>
-                </tr>
-              );
-            })}
-            {others.length > 0 && (
-              <tr>
-                <td>Others</td>
-                <td>{othersTotal.toFixed(2)}</td>
-                <td>N/A</td>
+      <table className='borderless-table border-collapse text-xs'>
+        <thead className='text-sm font-bold'>
+          <tr>
+            <th>Party</th>
+            <th>% District</th>
+            <th>% National</th>
+          </tr>
+        </thead>
+        <tbody className='text-sm'>
+          {majorParties.map((party) => {
+            const nationalRes = party.partikod ? getNationalResult(party.partikod) : null;
+            return (
+              <tr key={party.partikod}>
+                <td>{party.partiforkortning}</td>
+                <td>{party.andelRoster?.toFixed(2)}</td>
+                <td>{nationalRes ? nationalRes.toFixed(2) : 'N/A'}</td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {others.length > 0 && (
+            <tr>
+              <td>Others</td>
+              <td>{othersTotal.toFixed(2)}</td>
+              <td>N/A</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     );
   };
 
@@ -307,11 +305,11 @@ export default function Home() {
         )}
         <div id="map" className="flex-grow rounded-xl bg-gray-100"></div>
         <div id="sidebar"
-          className="overflow-scroll absolute top-0 right-0 h-full w-3/12 max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-300 ease-in-out z-50 p-4 rounded-r-xl backdrop-blur-md text-white">
+          className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white">
           {selectedDistrict ? (
             <div>
               <div className="flex flex-row justify-between relative">
-                <h2 className="text-lg font-bold text-slate-300">{selectedDistrict.Vdnamn}</h2>
+                <h2 className="text-lg font-bold text-slate-300 mb-2">{selectedDistrict.Vdnamn}</h2>
                 <button onClick={closeSidebar} className="text-white h-6">
                   <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z" /></svg>
                 </button>
@@ -320,7 +318,7 @@ export default function Home() {
             </div>
           ) : (
             <div>
-              <h2 className="text-xl font-bold">Click on a district</h2>
+              <h2 className="text-md font-bold">Click on a district</h2>
               <p>Click on a voting district to see the details.</p>
             </div>
           )}
