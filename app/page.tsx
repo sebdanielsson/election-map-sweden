@@ -290,7 +290,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-dvh grid grid-cols-1 p-6">
+    <main className="relative h-dvh grid grid-cols-1 md:p-6">
       <div className="relative flex w-full h-full overflow-hidden">
         {loading && (
           <div className="absolute w-full h-full z-50 bg-gray-800/50 backdrop-blur-md flex items-center justify-center rounded-xl">
