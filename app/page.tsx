@@ -1,9 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { SearchBox } from '@mapbox/search-js-react';
 import mapboxgl from 'mapbox-gl';
+import "mapbox-gl/dist/mapbox-gl.css";
 import { Feature, FeatureCollection } from 'geojson';
 import { Rostfordelning, Mandatfordelning, PartiRoster, Valdistrikt, RosterPaverkaMandat, ListRoster, Personrost, RosterOvrigaPartier, RosterEjPaverkaMandat, VotingDistrictProperties } from './electionDataInterfaces';
+
+const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
+const featureCollections: FeatureCollection[] = [];
 
 const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: string | null): PartiRoster[] | null => {
   if (!districtId) return null;
@@ -44,8 +49,6 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
     'VD_25_20240313_EU-val_2024.json',
   ];
 
-  const featureCollections: FeatureCollection[] = [];
-
   for (const url of fileUrls) {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`);
@@ -84,34 +87,39 @@ const closeSidebar = () => {
 }
 
 export default function Home() {
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
-  const [map, setMap] = useState<mapboxgl.Map | null>(null);
   const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [map, setMap] = useState<mapboxgl.Map | null>(null);
+
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<mapboxgl.Map | undefined>(undefined);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
-    const newMap = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/standard',
-      center: [16.325556, 62.3875],
-      zoom: 5,
-    });
+    mapboxgl.accessToken = accessToken;
 
-    setMap(newMap);
+    if (mapContainerRef.current) {
+      mapInstanceRef.current = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        center: [16.325556, 62.3875],
+        zoom: 5,
+      });
 
-    return () => {
-      if (newMap) {
-        newMap.remove();
-      }
-    };
+      mapInstanceRef.current.on("load", () => {
+        setMapLoaded(true);
+      });
+    }
   }, []);
 
   useEffect(() => {
     const loadDataAndSetUpMap = async () => {
-      if (map) {
+      if (mapInstanceRef.current && mapLoaded) {
+        const map = mapInstanceRef.current;
+
         map.on('load', async () => {
           map.resize();
           const featureCollections = await loadGeoJSONFiles();
@@ -242,7 +250,7 @@ export default function Home() {
     };
 
     loadDataAndSetUpMap();
-  }, [map]);
+  }, [mapLoaded]);
 
   const renderDistrictResults = (results: PartiRoster[] | null, nationalResults: PartiRoster[] | null) => {
     if (!results) return null;
@@ -290,40 +298,54 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-dvh grid grid-cols-1 md:p-6">
-      <div className="relative flex w-full h-full overflow-hidden">
-        {loading && (
-          <div className="absolute w-full h-full z-50 bg-gray-800/50 backdrop-blur-md flex items-center justify-center rounded-xl">
-            <div
-              className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
-              role="status">
-              <span
-                className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]"
-              >Loading...</span>
-            </div>
-          </div>
-        )}
-        <div id="map" className="flex-grow rounded-xl bg-gray-100"></div>
-        <div id="sidebar"
-          className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white">
-          {selectedDistrict ? (
-            <div>
-              <div className="flex flex-row justify-between relative">
-                <h2 className="text-lg font-bold text-slate-300 mb-2">{selectedDistrict.Vdnamn}</h2>
-                <button onClick={closeSidebar} className="text-white h-6">
-                  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z" /></svg>
-                </button>
+    <>
+      <div className="flex flex-col">
+        {/* <SearchBox
+          accessToken={accessToken}
+          map={mapInstanceRef.current}
+          mapboxgl={mapboxgl}
+          value={inputValue}
+          onChange={(d) => {
+            setInputValue(d);
+          }}
+          marker
+        /> */}
+      </div>
+      <main className="relative h-dvh grid grid-cols-1 md:p-6">
+        <div className="relative flex w-full h-full overflow-hidden">
+          {loading && (
+            <div className="absolute w-full h-full z-50 bg-gray-800/50 backdrop-blur-md flex items-center justify-center rounded-xl">
+              <div
+                className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                role="status">
+                <span
+                  className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]"
+                >Loading...</span>
               </div>
-              {renderDistrictResults(districtResults, nationalResults)}
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-md font-bold">Click on a district</h2>
-              <p>Click on a voting district to see the details.</p>
             </div>
           )}
+          <div id="map-container" ref={mapContainerRef} className="flex-grow rounded-xl bg-gray-100" />
+          <div id="sidebar"
+            className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white">
+            {selectedDistrict ? (
+              <div>
+                <div className="flex flex-row justify-between relative">
+                  <h2 className="text-lg font-bold text-slate-300 mb-2">{selectedDistrict.Vdnamn}</h2>
+                  <button onClick={closeSidebar} className="text-white h-6">
+                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z" /></svg>
+                  </button>
+                </div>
+                {renderDistrictResults(districtResults, nationalResults)}
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-md font-bold">Click on a district</h2>
+                <p>Click on a voting district to see the details.</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

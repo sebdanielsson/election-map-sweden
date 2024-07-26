@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.6.4",
+    "@mapbox/search-js-react": "^1.0.0-beta.21",
     "@types/unzipper": "^0.10.9",
     "@vercel/speed-insights": "^1.0.12",
     "axios": "^1.7.2",
