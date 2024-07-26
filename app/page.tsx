@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { SearchBox } from '@mapbox/search-js-react';
 import mapboxgl from 'mapbox-gl';
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Feature, FeatureCollection } from 'geojson';
 import { Rostfordelning, Mandatfordelning, PartiRoster, VotingDistrictProperties } from './electionDataInterfaces';
 
+const SearchBoxComponent = SearchBox as React.ComponentType<any>;
 const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
-const featureCollections: FeatureCollection[] = [];
 
 const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   const fileUrls = [
@@ -82,6 +82,7 @@ export default function Home() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | undefined>(undefined);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
     if (!accessToken) {
@@ -293,6 +294,16 @@ export default function Home() {
 
   return (
     <>
+      <SearchBoxComponent
+        accessToken={accessToken}
+        map={mapInstanceRef.current}
+        mapboxgl={mapboxgl}
+        value={inputValue}
+        onChange={(d: string) => {
+          setInputValue(d);
+        }}
+        marker
+      />
       <main className="relative h-dvh grid grid-cols-1 md:p-6">
         <div className="relative flex w-full h-full overflow-hidden">
           {loading && (
