@@ -5,24 +5,10 @@ import { SearchBox } from '@mapbox/search-js-react';
 import mapboxgl from 'mapbox-gl';
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Feature, FeatureCollection } from 'geojson';
-import { Rostfordelning, Mandatfordelning, PartiRoster, Valdistrikt, RosterPaverkaMandat, ListRoster, Personrost, RosterOvrigaPartier, RosterEjPaverkaMandat, VotingDistrictProperties } from './electionDataInterfaces';
+import { Rostfordelning, Mandatfordelning, PartiRoster, VotingDistrictProperties } from './electionDataInterfaces';
 
 const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
 const featureCollections: FeatureCollection[] = [];
-
-const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: string | null): PartiRoster[] | null => {
-  if (!districtId) return null;
-
-  const districtData = rostfordelningData.valdistrikt.find((d) => d.valdistriktskod === districtId);
-  if (!districtData) return null;
-  return districtData.rostfordelning.rosterPaverkaMandat.partiRoster;
-};
-
-const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`);
-  if (!response.ok) throw new Error('Network response was not ok');
-  return response.json();
-};
 
 const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   const fileUrls = [
@@ -49,10 +35,12 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
     'VD_25_20240313_EU-val_2024.json',
   ];
 
+  const loadedFeatureCollections: FeatureCollection[] = [];
+
   for (const url of fileUrls) {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`);
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) throw new Error(`Network response was not ok for URL: ${url}`);
       const data = await response.json();
 
       const transformedData: FeatureCollection = {
@@ -64,13 +52,13 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
         })),
       };
 
-      featureCollections.push(transformedData);
+      loadedFeatureCollections.push(transformedData);
     } catch (error) {
-      console.error('Error fetching GeoJSON data:', error);
+      console.error(`Error fetching GeoJSON data from ${url}:`, error);
     }
   }
 
-  return featureCollections;
+  return loadedFeatureCollections;
 };
 
 const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
@@ -79,27 +67,28 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   return response.json();
 };
 
-const closeSidebar = () => {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar && !sidebar.classList.contains('translate-x-full')) {
-    sidebar.classList.add('translate-x-full');
-  }
-}
+const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`);
+  if (!response.ok) throw new Error('Network response was not ok');
+  return response.json();
+};
 
 export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
-  const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
-  const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<VotingDistrictProperties | null>(null);
+  const [districtResults, setDistrictResults] = useState<PartiRoster[] | null>(null);
+  const [nationalResults, setNationalResults] = useState<PartiRoster[] | null>(null);
   const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
-  const [map, setMap] = useState<mapboxgl.Map | null>(null);
-
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | undefined>(undefined);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
+    if (!accessToken) {
+      console.error('Mapbox access token is not set');
+      return;
+    }
+
     mapboxgl.accessToken = accessToken;
 
     if (mapContainerRef.current) {
@@ -120,11 +109,10 @@ export default function Home() {
       if (mapInstanceRef.current && mapLoaded) {
         const map = mapInstanceRef.current;
 
-        map.on('load', async () => {
-          map.resize();
+        try {
           const featureCollections = await loadGeoJSONFiles();
 
-          for (const [index, transformedData] of featureCollections.entries()) {
+          featureCollections.forEach((transformedData, index) => {
             const sourceId = `voting-districts-${index}`;
             map.addSource(sourceId, {
               type: 'geojson',
@@ -152,7 +140,7 @@ export default function Home() {
                 'line-width': 0.5,
               },
             });
-          }
+          });
 
           map.addSource('highlight-feature', {
             type: 'geojson',
@@ -182,70 +170,70 @@ export default function Home() {
           setNationalResults(fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster);
           setLoading(false);
 
-          map.on('click', async (e) => {
-            for (const [index] of featureCollections.entries()) {
-              const sourceId = `voting-districts-${index}-fill`;
-              const features = map.queryRenderedFeatures(e.point, {
-                layers: [sourceId],
+          map.on('click', (e) => {
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: featureCollections.map((_f, index) => `voting-districts-${index}-fill`),
+            });
+
+            if (features.length) {
+              const feature = features[0];
+              if (!feature.properties) {
+                console.error('Feature properties are null');
+                return;
+              }
+
+              const properties = feature.properties as VotingDistrictProperties;
+              setSelectedDistrict(properties);
+
+              const results = fetchedRostfordelningData.valdistrikt
+                .find((d: any) => d.valdistriktskod === properties.Lkfv)
+                ?.rostfordelning?.rosterPaverkaMandat?.partiRoster;
+
+              if (results) {
+                setDistrictResults(results);
+              } else {
+                console.error('No results found for the selected district or feature properties are null');
+              }
+
+              const highlightSource = map.getSource('highlight-feature') as mapboxgl.GeoJSONSource;
+              highlightSource.setData({
+                type: 'FeatureCollection',
+                features: [feature],
               });
 
-              if (features.length) {
-                const feature = features[0];
-                setSelectedDistrict(feature.properties as VotingDistrictProperties);
-
-                if (feature.properties && fetchedRostfordelningData) {
-                  const results = getDistrictResults(fetchedRostfordelningData, feature.properties.Lkfv);
-                  setDistrictResults(results);
-                } else {
-                  console.error('No properties found for the selected district');
-                }
-
-                const highlightSource = map.getSource('highlight-feature') as mapboxgl.GeoJSONSource;
-                highlightSource.setData({
-                  type: 'FeatureCollection',
-                  features: [feature],
-                });
-
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar && sidebar.classList.contains('translate-x-full')) {
-                  sidebar.classList.remove('translate-x-full');
-                }
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar && sidebar.classList.contains('translate-x-full')) {
+                sidebar.classList.remove('translate-x-full');
               }
             }
           });
 
           const tooltip = new mapboxgl.Popup({
             closeButton: false,
-            closeOnClick: false
+            closeOnClick: false,
           });
 
           map.on('mousemove', (e) => {
-            for (const [index] of featureCollections.entries()) {
-              const sourceId = `voting-districts-${index}-fill`;
-              const features = map.queryRenderedFeatures(e.point, {
-                layers: [sourceId],
-              });
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: featureCollections.map((_f, index) => `voting-districts-${index}-fill`),
+            });
 
-              if (features.length) {
-                const feature = features[0];
-                const districtName = feature.properties?.Vdnamn;
+            if (features.length) {
+              const feature = features[0];
+              const districtName = feature.properties ? feature.properties.Vdnamn : null;
 
-                if (districtName) {
-                  tooltip
-                    .setLngLat(e.lngLat)
-                    .setHTML(`<strong>${districtName}</strong>`)
-                    .addTo(map);
-                }
-                return;
+              if (districtName) {
+                tooltip.setLngLat(e.lngLat).setHTML(`<strong>${districtName}</strong>`).addTo(map);
+              } else {
+                console.warn('District name not found');
               }
+              return;
             }
             tooltip.remove();
           });
-        });
-
-        map.on('error', (e) => {
-          console.error('Map error:', e);
-        });
+        } catch (error) {
+          console.error('Map initialization error:', error);
+        }
       }
     };
 
@@ -261,8 +249,7 @@ export default function Home() {
     const othersTotal = others.reduce((sum, party) => sum + (party.andelRoster || 0), 0);
 
     const getNationalResult = (partikod: string) => {
-      if (!nationalResults) return null;
-      return nationalResults.find((p) => p.partikod === partikod)?.andelRoster;
+      return nationalResults ? nationalResults.find((p) => p.partikod === partikod)?.andelRoster : null;
     };
 
     return (
@@ -297,20 +284,15 @@ export default function Home() {
     );
   };
 
+  const closeSidebar = () => {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !sidebar.classList.contains('translate-x-full')) {
+      sidebar.classList.add('translate-x-full');
+    }
+  };
+
   return (
     <>
-      <div className="flex flex-col">
-        {/* <SearchBox
-          accessToken={accessToken}
-          map={mapInstanceRef.current}
-          mapboxgl={mapboxgl}
-          value={inputValue}
-          onChange={(d) => {
-            setInputValue(d);
-          }}
-          marker
-        /> */}
-      </div>
       <main className="relative h-dvh grid grid-cols-1 md:p-6">
         <div className="relative flex w-full h-full overflow-hidden">
           {loading && (
