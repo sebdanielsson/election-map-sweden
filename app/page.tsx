@@ -7,7 +7,6 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Feature, FeatureCollection } from 'geojson';
 import { Rostfordelning, Mandatfordelning, PartiRoster, VotingDistrictProperties } from './electionDataInterfaces';
 
-const SearchBoxComponent = SearchBox as React.ComponentType<any>;
 const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
 
 const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
@@ -294,16 +293,21 @@ export default function Home() {
 
   return (
     <>
-      <SearchBoxComponent
+      {/* <SearchBox
         accessToken={accessToken}
-        map={mapInstanceRef.current}
-        mapboxgl={mapboxgl}
         value={inputValue}
-        onChange={(d: string) => {
-          setInputValue(d);
+        onChange={(newValue) => setInputValue(newValue)}
+        onRetrieve={(result) => {
+          // Handle the selected result
+          if (mapInstanceRef.current && result.features[0].geometry.type === 'Point') {
+            const [lng, lat] = result.features[0].geometry.coordinates;
+            mapInstanceRef.current.flyTo({ center: [lng, lat], zoom: 14 });
+          }
         }}
-        marker
-      />
+        map={mapInstanceRef.current}
+        marker={true}
+        mapboxgl={mapboxgl}
+      /> */}
       <main className="relative h-dvh grid grid-cols-1 md:p-6">
         <div className="relative flex w-full h-full overflow-hidden">
           {loading && (
