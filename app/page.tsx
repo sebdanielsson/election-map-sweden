@@ -84,24 +84,17 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    if (!accessToken) {
-      console.error('Mapbox access token is not set');
-      return;
-    }
-
     mapboxgl.accessToken = accessToken;
 
-    if (mapContainerRef.current) {
-      mapInstanceRef.current = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        center: [16.325556, 62.3875],
-        zoom: 5,
-      });
+    mapInstanceRef.current = new mapboxgl.Map({
+      container: mapContainerRef.current || "",
+      center: [16.325556, 62.3875],
+      zoom: 5,
+    });
 
-      mapInstanceRef.current.on("load", () => {
-        setMapLoaded(true);
-      });
-    }
+    mapInstanceRef.current.on("load", () => {
+      setMapLoaded(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -293,21 +286,18 @@ export default function Home() {
 
   return (
     <>
-      {/* <SearchBox
+      {/* @ts-ignore next-line */}
+      <SearchBox
         accessToken={accessToken}
-        value={inputValue}
-        onChange={(newValue) => setInputValue(newValue)}
-        onRetrieve={(result) => {
-          // Handle the selected result
-          if (mapInstanceRef.current && result.features[0].geometry.type === 'Point') {
-            const [lng, lat] = result.features[0].geometry.coordinates;
-            mapInstanceRef.current.flyTo({ center: [lng, lat], zoom: 14 });
-          }
-        }}
         map={mapInstanceRef.current}
-        marker={true}
         mapboxgl={mapboxgl}
-      /> */}
+        value={inputValue}
+        onChange={(d) => {
+          setInputValue(d);
+        }}
+        marker
+      />
+      <div>lol</div>
       <main className="relative h-dvh grid grid-cols-1 md:p-6">
         <div className="relative flex w-full h-full overflow-hidden">
           {loading && (
