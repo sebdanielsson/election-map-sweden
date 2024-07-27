@@ -286,8 +286,7 @@ export default function Home() {
 
   return (
     <>
-      {/* @ts-ignore next-line */}
-      <SearchBox
+      {/* <SearchBox
         accessToken={accessToken}
         map={mapInstanceRef.current}
         mapboxgl={mapboxgl}
@@ -296,8 +295,7 @@ export default function Home() {
           setInputValue(d);
         }}
         marker
-      />
-      <div>lol</div>
+      /> */}
       <main className="relative h-dvh grid grid-cols-1 md:p-6">
         <div className="relative flex w-full h-full overflow-hidden">
           {loading && (
@@ -311,7 +309,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          <div id="map-container" ref={mapContainerRef} className="flex-grow rounded-xl bg-gray-100"></div>
+          <div id="map-container" ref={mapContainerRef} className="flex-grow rounded-xl bg-gray-100" />
           <div id="sidebar"
             className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white">
             {selectedDistrict ? (
