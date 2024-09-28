@@ -24,11 +24,7 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
+  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb)))
     rgb(var(--background-start-rgb));
 }
 
@@ -64,7 +60,8 @@ body {
   }
 }
 
-.borderless-table td, .borderless-table th {
+.borderless-table td,
+.borderless-table th {
   padding: 0px;
   text-align: left;
 }

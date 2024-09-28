@@ -3,9 +3,23 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { Feature, FeatureCollection } from 'geojson';
-import { Rostfordelning, Mandatfordelning, PartiRoster, Valdistrikt, RosterPaverkaMandat, ListRoster, Personrost, RosterOvrigaPartier, RosterEjPaverkaMandat, VotingDistrictProperties } from './electionDataInterfaces';
+import {
+  Rostfordelning,
+  Mandatfordelning,
+  PartiRoster,
+  Valdistrikt,
+  RosterPaverkaMandat,
+  ListRoster,
+  Personrost,
+  RosterOvrigaPartier,
+  RosterEjPaverkaMandat,
+  VotingDistrictProperties,
+} from './electionDataInterfaces';
 
-const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: string | null): PartiRoster[] | null => {
+const getDistrictResults = (
+  rostfordelningData: Rostfordelning,
+  districtId: string | null,
+): PartiRoster[] | null => {
   if (!districtId) return null;
 
   const districtData = rostfordelningData.valdistrikt.find((d) => d.valdistriktskod === districtId);
@@ -14,7 +28,9 @@ const getDistrictResults = (rostfordelningData: Rostfordelning, districtId: stri
 };
 
 const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`);
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`,
+  );
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
 };
@@ -48,17 +64,21 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
   for (const url of fileUrls) {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`,
+      );
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
 
       const transformedData: FeatureCollection = {
         type: 'FeatureCollection',
-        features: data.features.map((feature: any): Feature => ({
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: feature.properties,
-        })),
+        features: data.features.map(
+          (feature: any): Feature => ({
+            type: 'Feature',
+            geometry: feature.geometry,
+            properties: feature.properties,
+          }),
+        ),
       };
 
       featureCollections.push(transformedData);
@@ -71,7 +91,9 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 };
 
 const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`);
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`,
+  );
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
 };
@@ -81,7 +103,7 @@ const closeSidebar = () => {
   if (sidebar && !sidebar.classList.contains('translate-x-full')) {
     sidebar.classList.add('translate-x-full');
   }
-}
+};
 
 export default function Home() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
@@ -167,11 +189,13 @@ export default function Home() {
 
           const [fetchedRostfordelningData, fetchedNationalResultsData] = await Promise.all([
             fetchRostfordelningData(),
-            fetchNationalResultsData()
+            fetchNationalResultsData(),
           ]);
 
           setRostfordelningData(fetchedRostfordelningData);
-          setNationalResults(fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster);
+          setNationalResults(
+            fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
+          );
           setLoading(false);
 
           map.on('click', async (e) => {
@@ -186,13 +210,18 @@ export default function Home() {
                 setSelectedDistrict(feature.properties as VotingDistrictProperties);
 
                 if (feature.properties && fetchedRostfordelningData) {
-                  const results = getDistrictResults(fetchedRostfordelningData, feature.properties.Lkfv);
+                  const results = getDistrictResults(
+                    fetchedRostfordelningData,
+                    feature.properties.Lkfv,
+                  );
                   setDistrictResults(results);
                 } else {
                   console.error('No properties found for the selected district');
                 }
 
-                const highlightSource = map.getSource('highlight-feature') as mapboxgl.GeoJSONSource;
+                const highlightSource = map.getSource(
+                  'highlight-feature',
+                ) as mapboxgl.GeoJSONSource;
                 highlightSource.setData({
                   type: 'FeatureCollection',
                   features: [feature],
@@ -208,7 +237,7 @@ export default function Home() {
 
           const tooltip = new mapboxgl.Popup({
             closeButton: false,
-            closeOnClick: false
+            closeOnClick: false,
           });
 
           map.on('mousemove', (e) => {
@@ -244,7 +273,10 @@ export default function Home() {
     loadDataAndSetUpMap();
   }, [map]);
 
-  const renderDistrictResults = (results: PartiRoster[] | null, nationalResults: PartiRoster[] | null) => {
+  const renderDistrictResults = (
+    results: PartiRoster[] | null,
+    nationalResults: PartiRoster[] | null,
+  ) => {
     if (!results) return null;
 
     const others = results.filter((p) => p.andelRoster !== null && p.andelRoster < 4);
@@ -258,15 +290,15 @@ export default function Home() {
     };
 
     return (
-      <table className='borderless-table border-collapse text-xs'>
-        <thead className='text-sm font-bold'>
+      <table className="borderless-table border-collapse text-xs">
+        <thead className="text-sm font-bold">
           <tr>
             <th>Party</th>
             <th>% District</th>
             <th>% National</th>
           </tr>
         </thead>
-        <tbody className='text-sm'>
+        <tbody className="text-sm">
           {majorParties.map((party) => {
             const nationalRes = party.partikod ? getNationalResult(party.partikod) : null;
             return (
@@ -296,22 +328,35 @@ export default function Home() {
           <div className="absolute w-full h-full z-50 bg-gray-800/50 backdrop-blur-md flex items-center justify-center rounded-xl">
             <div
               className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
-              role="status">
-              <span
-                className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]"
-              >Loading...</span>
+              role="status"
+            >
+              <span className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">
+                Loading...
+              </span>
             </div>
           </div>
         )}
         <div id="map" className="flex-grow rounded-xl bg-gray-100"></div>
-        <div id="sidebar"
-          className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white">
+        <div
+          id="sidebar"
+          className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white"
+        >
           {selectedDistrict ? (
             <div>
               <div className="flex flex-row justify-between relative">
                 <h2 className="text-lg font-bold text-slate-300 mb-2">{selectedDistrict.Vdnamn}</h2>
                 <button onClick={closeSidebar} className="text-white h-6">
-                  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z" /></svg>
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
+                    />
+                  </svg>
                 </button>
               </div>
               {renderDistrictResults(districtResults, nationalResults)}
