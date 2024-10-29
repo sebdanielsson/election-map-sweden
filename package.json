@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/geojson": "7946.0.14",
-    "@types/node": "^20.16.10",
+    "@types/node": "^22.0.0",
     "@types/proj4": "^2.5.5",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
