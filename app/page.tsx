@@ -7,12 +7,12 @@ import {
   Rostfordelning,
   Mandatfordelning,
   PartiRoster,
-  Valdistrikt,
-  RosterPaverkaMandat,
-  ListRoster,
-  Personrost,
-  RosterOvrigaPartier,
-  RosterEjPaverkaMandat,
+  /*   Valdistrikt,
+    RosterPaverkaMandat,
+    ListRoster,
+    Personrost,
+    RosterOvrigaPartier,
+    RosterEjPaverkaMandat, */
   VotingDistrictProperties,
 } from './electionDataInterfaces';
 
@@ -73,7 +73,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
       const transformedData: FeatureCollection = {
         type: 'FeatureCollection',
         features: data.features.map(
-          (feature: any): Feature => ({
+          (feature: Feature): Feature => ({
             type: 'Feature',
             geometry: feature.geometry,
             properties: feature.properties,
@@ -110,6 +110,7 @@ export default function Home() {
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<mapboxgl.Map | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 

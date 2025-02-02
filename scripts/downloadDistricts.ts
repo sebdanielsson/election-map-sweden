@@ -55,9 +55,9 @@ const downloadAndExtract = async (url: string) => {
 
     response.data.pipe(writer);
 
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
+    await new Promise<void>((resolve, reject) => {
+      writer.on('finish', () => resolve());
+      writer.on('error', (err) => reject(err));
     });
 
     await fs
