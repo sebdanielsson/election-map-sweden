@@ -1,73 +1,101 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+@theme {
+  --background-image-gradient-radial: radial-gradient(var(--tw-gradient-stops));
+  --background-image-gradient-conic: conic-gradient(
+    from 180deg at 50% 50%,
+    var(--tw-gradient-stops)
+  );
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
   }
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb)))
-    rgb(var(--background-start-rgb));
-}
-
-.mapboxgl-popup-content {
-  background-color: rgb(31 41 55 / 0.5) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: rgb(255 255 255 / 1);
-  padding: 0.25rem !important;
-  margin-top: 1.25rem;
-  margin-bottom: 1.25rem;
-}
-
-.mapboxgl-popup-tip {
-  display: none;
-}
-
-.borderless-table td:not(:last-child) {
-  padding-right: 1.5rem;
-}
-
-.borderless-table th:not(:last-child) {
-  padding-right: 1.5rem;
-}
-
-@media (min-width: 768px) {
-  .borderless-table td:not(:last-child) {
-    padding-right: 0.75rem;
-  }
-
-  .borderless-table th:not(:last-child) {
-    padding-right: 0.75rem;
-  }
-}
-
-.borderless-table td,
-.borderless-table th {
-  padding: 0px;
-  text-align: left;
+@utility text-balance {
+  text-wrap: balance;
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  :root {
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --foreground-rgb: 255, 255, 255;
+      --background-start-rgb: 0, 0, 0;
+      --background-end-rgb: 0, 0, 0;
+    }
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    color: rgb(var(--foreground-rgb));
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        rgb(var(--background-end-rgb))
+      )
+      rgb(var(--background-start-rgb));
+  }
+
+  .mapboxgl-popup-content {
+    background-color: rgb(31 41 55 / 0.5) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: rgb(255 255 255 / 1);
+    padding: 0.25rem !important;
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .mapboxgl-popup-tip {
+    display: none;
+  }
+
+  .borderless-table td:not(:last-child) {
+    padding-right: 1.5rem;
+  }
+
+  .borderless-table th:not(:last-child) {
+    padding-right: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .borderless-table td:not(:last-child) {
+      padding-right: 0.75rem;
+    }
+
+    .borderless-table th:not(:last-child) {
+      padding-right: 0.75rem;
+    }
+  }
+
+  .borderless-table td,
+  .borderless-table th {
+    padding: 0px;
+    text-align: left;
   }
 }
