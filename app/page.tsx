@@ -323,15 +323,15 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-dvh grid grid-cols-1 md:p-6">
-      <div className="relative flex w-full h-full overflow-hidden">
+    <main className="relative grid h-dvh grid-cols-1 md:p-6">
+      <div className="relative flex h-full w-full overflow-hidden">
         {loading && (
-          <div className="absolute w-full h-full z-50 bg-gray-800/50 backdrop-blur-md flex items-center justify-center rounded-xl">
+          <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 backdrop-blur-md">
             <div
               className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
               role="status"
             >
-              <span className="absolute! -m-px! h-px! w-px! overflow-hidden! whitespace-nowrap! border-0! p-0! [clip:rect(0,0,0,0)]!">
+              <span className="absolute! -m-px! h-px! w-px! overflow-hidden! border-0! p-0! whitespace-nowrap! [clip:rect(0,0,0,0)]!">
                 Loading...
               </span>
             </div>
@@ -340,13 +340,13 @@ export default function Home() {
         <div id="map" className="grow rounded-xl bg-gray-100"></div>
         <div
           id="sidebar"
-          className="overflow-scroll absolute bottom-0 right-0 lg:h-full w-full lg:w-3/12 lg:max-w-sm bg-gray-800/50 transform translate-x-full transition-transform duration-500 lg:duration-300 ease-in-out z-50 p-4 rounded-t-xl lg:rounded-l-none lg:rounded-r-xl backdrop-blur-md text-white"
+          className="absolute right-0 bottom-0 z-50 w-full translate-x-full transform overflow-scroll rounded-t-xl bg-gray-800/50 p-4 text-white backdrop-blur-md transition-transform duration-500 ease-in-out lg:h-full lg:w-3/12 lg:max-w-sm lg:rounded-l-none lg:rounded-r-xl lg:duration-300"
         >
           {selectedDistrict ? (
             <div>
-              <div className="flex flex-row justify-between relative">
-                <h2 className="text-lg font-bold text-slate-300 mb-2">{selectedDistrict.Vdnamn}</h2>
-                <button onClick={closeSidebar} className="text-white h-6">
+              <div className="relative flex flex-row justify-between">
+                <h2 className="mb-2 text-lg font-bold text-slate-300">{selectedDistrict.Vdnamn}</h2>
+                <button onClick={closeSidebar} className="h-6 text-white">
                   <svg
                     width="24"
                     height="24"
