@@ -9,8 +9,8 @@
     "start": "dotenvx run -- next start",
     "lint": "next lint",
     "dotenvx": "dotenvx",
-    "download-districts": "tsc --esModuleInterop scripts/downloadDistricts.ts && node scripts/downloadDistricts.js temp/districts/EPSG3006",
-    "transform-geojson": "tsc --esModuleInterop scripts/transformGeojson.ts && node scripts/transformGeojson.js temp/districts/EPSG3006 public/data/districts",
+    "download-districts": "node scripts/downloadDistricts.ts temp/districts/EPSG3006",
+    "transform-geojson": "node scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
     "prettier": "prettier --write .",
     "prettier:check": "prettier . --check",
     "stylelint": "stylelint --allow-empty-input \"src/**/*.css\""
