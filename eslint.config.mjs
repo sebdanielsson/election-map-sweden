@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 
 export default [
   {
-    ignores: ['dist', '.astro'],
+    ignores: ['dist'],
   },
   {
     files: ['src/**/*.{js,ts,jsx,tsx}'],
