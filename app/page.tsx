@@ -123,7 +123,10 @@ export default function Home() {
       zoom: 5,
     });
 
-    setMap(newMap);
+    // Set the map in a callback to avoid synchronous setState in effect
+    newMap.on('load', () => {
+      setMap(newMap);
+    });
 
     return () => {
       if (newMap) {
@@ -135,134 +138,133 @@ export default function Home() {
   useEffect(() => {
     const loadDataAndSetUpMap = async () => {
       if (map) {
-        map.on('load', async () => {
-          map.resize();
-          const featureCollections = await loadGeoJSONFiles();
+        // Map is already loaded when we set it in state, so we can proceed directly
+        map.resize();
+        const featureCollections = await loadGeoJSONFiles();
 
-          for (const [index, transformedData] of featureCollections.entries()) {
-            const sourceId = `voting-districts-${index}`;
-            map.addSource(sourceId, {
-              type: 'geojson',
-              data: transformedData,
-            });
-
-            map.addLayer({
-              id: `${sourceId}-fill`,
-              type: 'fill',
-              source: sourceId,
-              layout: {},
-              paint: {
-                'fill-color': '#006AA7',
-                'fill-opacity': 0.5,
-              },
-            });
-
-            map.addLayer({
-              id: `${sourceId}-outline`,
-              type: 'line',
-              source: sourceId,
-              layout: {},
-              paint: {
-                'line-color': '#000000',
-                'line-width': 0.5,
-              },
-            });
-          }
-
-          map.addSource('highlight-feature', {
+        for (const [index, transformedData] of featureCollections.entries()) {
+          const sourceId = `voting-districts-${index}`;
+          map.addSource(sourceId, {
             type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [],
-            },
+            data: transformedData,
           });
 
           map.addLayer({
-            id: 'voting-districts-highlight',
+            id: `${sourceId}-fill`,
             type: 'fill',
-            source: 'highlight-feature',
+            source: sourceId,
             layout: {},
             paint: {
-              'fill-color': '#FECC02',
+              'fill-color': '#006AA7',
               'fill-opacity': 0.5,
             },
           });
 
-          const [fetchedRostfordelningData, fetchedNationalResultsData] = await Promise.all([
-            fetchRostfordelningData(),
-            fetchNationalResultsData(),
-          ]);
+          map.addLayer({
+            id: `${sourceId}-outline`,
+            type: 'line',
+            source: sourceId,
+            layout: {},
+            paint: {
+              'line-color': '#000000',
+              'line-width': 0.5,
+            },
+          });
+        }
 
-          setRostfordelningData(fetchedRostfordelningData);
-          setNationalResults(
-            fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
-          );
-          setLoading(false);
+        map.addSource('highlight-feature', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
 
-          map.on('click', async (e) => {
-            for (const [index] of featureCollections.entries()) {
-              const sourceId = `voting-districts-${index}-fill`;
-              const features = map.queryRenderedFeatures(e.point, {
-                layers: [sourceId],
+        map.addLayer({
+          id: 'voting-districts-highlight',
+          type: 'fill',
+          source: 'highlight-feature',
+          layout: {},
+          paint: {
+            'fill-color': '#FECC02',
+            'fill-opacity': 0.5,
+          },
+        });
+
+        const [fetchedRostfordelningData, fetchedNationalResultsData] = await Promise.all([
+          fetchRostfordelningData(),
+          fetchNationalResultsData(),
+        ]);
+
+        setRostfordelningData(fetchedRostfordelningData);
+        setNationalResults(
+          fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
+        );
+        setLoading(false);
+
+        map.on('click', async (e) => {
+          for (const [index] of featureCollections.entries()) {
+            const sourceId = `voting-districts-${index}-fill`;
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: [sourceId],
+            });
+
+            if (features.length) {
+              const feature = features[0];
+              setSelectedDistrict(feature.properties as VotingDistrictProperties);
+
+              if (feature.properties && fetchedRostfordelningData) {
+                const results = getDistrictResults(
+                  fetchedRostfordelningData,
+                  feature.properties.Lkfv,
+                );
+                setDistrictResults(results);
+              } else {
+                console.error('No properties found for the selected district');
+              }
+
+              const highlightSource = map.getSource(
+                'highlight-feature',
+              ) as mapboxgl.GeoJSONSource;
+              highlightSource.setData({
+                type: 'FeatureCollection',
+                features: [feature],
               });
 
-              if (features.length) {
-                const feature = features[0];
-                setSelectedDistrict(feature.properties as VotingDistrictProperties);
-
-                if (feature.properties && fetchedRostfordelningData) {
-                  const results = getDistrictResults(
-                    fetchedRostfordelningData,
-                    feature.properties.Lkfv,
-                  );
-                  setDistrictResults(results);
-                } else {
-                  console.error('No properties found for the selected district');
-                }
-
-                const highlightSource = map.getSource(
-                  'highlight-feature',
-                ) as mapboxgl.GeoJSONSource;
-                highlightSource.setData({
-                  type: 'FeatureCollection',
-                  features: [feature],
-                });
-
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar && sidebar.classList.contains('translate-x-full')) {
-                  sidebar.classList.remove('translate-x-full');
-                }
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar && sidebar.classList.contains('translate-x-full')) {
+                sidebar.classList.remove('translate-x-full');
               }
             }
-          });
+          }
+        });
 
-          const tooltip = new mapboxgl.Popup({
-            closeButton: false,
-            closeOnClick: false,
-          });
+        const tooltip = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+        });
 
-          map.on('mousemove', (e) => {
-            for (const [index] of featureCollections.entries()) {
-              const sourceId = `voting-districts-${index}-fill`;
-              const features = map.queryRenderedFeatures(e.point, {
-                layers: [sourceId],
-              });
+        map.on('mousemove', (e) => {
+          for (const [index] of featureCollections.entries()) {
+            const sourceId = `voting-districts-${index}-fill`;
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: [sourceId],
+            });
 
-              if (features.length) {
-                const feature = features[0];
-                const districtName = feature.properties?.Vdnamn;
+            if (features.length) {
+              const feature = features[0];
+              const districtName = feature.properties?.Vdnamn;
 
-                if (districtName) {
-                  tooltip
-                    .setLngLat(e.lngLat)
-                    .setHTML(`<strong>${districtName}</strong>`)
-                    .addTo(map);
-                }
-                return;
+              if (districtName) {
+                tooltip
+                  .setLngLat(e.lngLat)
+                  .setHTML(`<strong>${districtName}</strong>`)
+                  .addTo(map);
               }
+              return;
             }
-            tooltip.remove();
-          });
+          }
+          tooltip.remove();
         });
 
         map.on('error', (e) => {
