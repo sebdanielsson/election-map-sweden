@@ -223,9 +223,7 @@ export default function Home() {
                 console.error('No properties found for the selected district');
               }
 
-              const highlightSource = map.getSource(
-                'highlight-feature',
-              ) as mapboxgl.GeoJSONSource;
+              const highlightSource = map.getSource('highlight-feature') as mapboxgl.GeoJSONSource;
               highlightSource.setData({
                 type: 'FeatureCollection',
                 features: [feature],
@@ -256,10 +254,7 @@ export default function Home() {
               const districtName = feature.properties?.Vdnamn;
 
               if (districtName) {
-                tooltip
-                  .setLngLat(e.lngLat)
-                  .setHTML(`<strong>${districtName}</strong>`)
-                  .addTo(map);
+                tooltip.setLngLat(e.lngLat).setHTML(`<strong>${districtName}</strong>`).addTo(map);
               }
               return;
             }
