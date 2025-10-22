@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "dotenvx run -f .env.development -- next dev --turbopack",
-    "build": "dotenvx run -- next build",
-    "start": "dotenvx run -- next start",
+    "build": "dotenvx run -f .env.production -- next build",
+    "start": "dotenvx run -f .env.production -- next start",
     "lint": "eslint .",
     "dotenvx": "dotenvx",
     "download-districts": "node scripts/downloadDistricts.ts temp/districts/EPSG3006",
