@@ -1,15 +1,19 @@
-// @ts-check
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { FlatCompat } from '@eslint/eslintrc';
 
-import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-export default [
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+const eslintConfig = [
   {
-    ignores: ['dist'],
+    ignores: ['node_modules/**', '.next/**', 'out/**', 'build/**', 'next-env.d.ts', '__tests__/**'],
   },
-  {
-    files: ['src/**/*.{js,ts,jsx,tsx}'],
-  },
-  eslint.configs.recommended,
-  ...tseslint.configs.strict,
+  ...compat.extends('next/core-web-vitals', 'next/typescript'),
 ];
+
+export default eslintConfig;
