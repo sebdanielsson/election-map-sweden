@@ -110,7 +110,6 @@ export default function Home() {
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<mapboxgl.Map | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 

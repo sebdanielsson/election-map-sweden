@@ -81,7 +81,6 @@ export interface Valomrade {
   antalRostberattigadeIRaknadeValdistrikt: number | null;
   valomradessparrProcent: number | null;
   meddelandetext: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   valomradeskodForegaendeVal: Array<any>;
   totaltAntalMandatForegaendeVal: number | null;
   totaltAntalRosterForegaendeVal: number | null;
