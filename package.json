@@ -35,7 +35,7 @@
     "@types/node": "^24.0.12",
     "@types/proj4": "^2.19.0",
     "@types/react": "19.2.3",
-    "@types/react-dom": "19.2.2",
+    "@types/react-dom": "19.2.3",
     "@types/webpack-env": "^1.18.8",
     "eslint": "^9.38.0",
     "eslint-config-next": "16.0.1",
@@ -56,6 +56,6 @@
   ],
   "overrides": {
     "@types/react": "19.2.3",
-    "@types/react-dom": "19.2.2"
+    "@types/react-dom": "19.2.3"
   }
 }
