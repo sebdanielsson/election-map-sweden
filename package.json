@@ -34,7 +34,7 @@
     "@types/geojson": "7946.0.16",
     "@types/node": "^24.0.12",
     "@types/proj4": "^2.19.0",
-    "@types/react": "19.2.4",
+    "@types/react": "19.2.5",
     "@types/react-dom": "19.2.3",
     "@types/webpack-env": "^1.18.8",
     "eslint": "^9.38.0",
@@ -55,7 +55,7 @@
     "maintained node versions"
   ],
   "overrides": {
-    "@types/react": "19.2.4",
+    "@types/react": "19.2.5",
     "@types/react-dom": "19.2.3"
   }
 }
