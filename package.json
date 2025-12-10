@@ -32,7 +32,7 @@
     "@next/eslint-plugin-next": "16.0.8",
     "@tailwindcss/postcss": "^4.1.11",
     "@types/geojson": "7946.0.16",
-    "@types/node": "^24.0.12",
+    "@types/node": "^25.0.0",
     "@types/proj4": "^2.19.0",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
