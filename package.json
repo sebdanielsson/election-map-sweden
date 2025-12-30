@@ -13,7 +13,7 @@
     "transform-geojson": "node scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
     "prettier": "prettier --write .",
     "prettier:check": "prettier . --check",
-    "stylelint": "stylelint --allow-empty-input \"src/**/*.css\""
+    "stylelint": "stylelint --allow-empty-input \"app/**/*.css\""
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.47.2",
