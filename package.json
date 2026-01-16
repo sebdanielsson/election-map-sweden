@@ -58,5 +58,8 @@
   "overrides": {
     "@types/react": "19.2.8",
     "@types/react-dom": "19.2.3"
+  },
+  "engines": {
+    "bun": ">=1.3.6"
   }
 }
