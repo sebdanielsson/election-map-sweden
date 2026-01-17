@@ -28,7 +28,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run format check
-        run: bun --bun run format:check
+        run: bun run format:check
 
       - name: Run ESLint
         run: bun --bun run lint
