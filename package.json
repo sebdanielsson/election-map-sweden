@@ -22,7 +22,7 @@
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "mapbox-gl": "^3.18.0",
-    "next": "16.1.4",
+    "next": "16.1.5",
     "proj4": "^2.20.2",
     "react": "19.2.3",
     "react-dom": "19.2.3"
@@ -30,7 +30,7 @@
   "devDependencies": {
     "@dreamsicle.io/stylelint-config-tailwindcss": "^1.1.2",
     "@eslint/eslintrc": "^3.3.3",
-    "@next/eslint-plugin-next": "16.1.4",
+    "@next/eslint-plugin-next": "16.1.5",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/geojson": "7946.0.16",
     "@types/node": "^25.0.9",
@@ -39,7 +39,7 @@
     "@types/react-dom": "19.2.3",
     "@types/webpack-env": "^1.18.8",
     "eslint": "^9.39.2",
-    "eslint-config-next": "16.1.4",
+    "eslint-config-next": "16.1.5",
     "oxfmt": "^0.27.0",
     "postcss": "^8.5.6",
     "stylelint": "^17.0.0",
