@@ -35,7 +35,7 @@
     "@types/geojson": "7946.0.16",
     "@types/node": "^25.0.9",
     "@types/proj4": "^2.19.0",
-    "@types/react": "19.2.11",
+    "@types/react": "19.2.13",
     "@types/react-dom": "19.2.3",
     "@types/webpack-env": "^1.18.8",
     "eslint": "^9.39.2",
@@ -51,7 +51,7 @@
     "unzipper": "^0.12.3"
   },
   "overrides": {
-    "@types/react": "19.2.11",
+    "@types/react": "19.2.13",
     "@types/react-dom": "19.2.3"
   },
   "browserslist": [
