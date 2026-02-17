@@ -33,7 +33,6 @@
     "@tailwindcss/postcss": "^4.1.18",
     "@types/geojson": "7946.0.16",
     "@types/node": "^25.2.3",
-    "@types/proj4": "^2.19.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/webpack-env": "^1.18.8",
