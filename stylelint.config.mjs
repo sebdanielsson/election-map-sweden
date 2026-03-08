@@ -1,5 +1,6 @@
-/** @type {import('stylelint').Config} */
-const config = {
+import type { Config } from "stylelint";
+
+export default {
   extends: [
     'stylelint-config-standard',
     'stylelint-config-html/html',
@@ -8,6 +9,4 @@ const config = {
   rules: {
     'color-hex-length': null,
   },
-};
-
-export default config;
+} satisfies Config;
