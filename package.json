@@ -16,7 +16,7 @@
     "stylelint": "stylelint --allow-empty-input \"app/**/*.css\""
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.52.0",
+    "@dotenvx/dotenvx": "^2.0.0",
     "@types/unzipper": "^0.10.11",
     "@vercel/speed-insights": "^2.0.0",
     "axios": "^1.13.5",
