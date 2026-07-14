@@ -67,9 +67,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
   for (const url of fileUrls) {
     try {
-      const response = await fetch(
-        `${DATA_BASE_URL}/data/districts/EPSG4326/${url}`,
-      );
+      const response = await fetch(`${DATA_BASE_URL}/data/districts/EPSG4326/${url}`);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
 
