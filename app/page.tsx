@@ -27,9 +27,12 @@ const getDistrictResults = (
   return districtData.rostfordelning.rosterPaverkaMandat.partiRoster;
 };
 
+// Public election data hosted on Backblaze B2 (bucket: election-map-sweden)
+const DATA_BASE_URL = 'https://f001.backblazeb2.com/file/election-map-sweden';
+
 const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`,
+    `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`,
   );
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
@@ -65,7 +68,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   for (const url of fileUrls) {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/districts/EPSG4326/${url}`,
+        `${DATA_BASE_URL}/data/districts/EPSG4326/${url}`,
       );
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
@@ -92,7 +95,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
 const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_S3_BUCKET_ENDPOINT}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`,
+    `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`,
   );
   if (!response.ok) throw new Error('Network response was not ok');
   return response.json();
