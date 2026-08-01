@@ -41,7 +41,7 @@
     "oxfmt": "^0.61.0",
     "postcss": "^8.5.6",
     "stylelint": "^17.3.0",
-    "stylelint-config-html": "^1.1.0",
+    "stylelint-config-html": "^2.0.0",
     "stylelint-config-standard": "^40.0.0",
     "tailwindcss": "^4.2.1",
     "typescript": "~6.0.0",
