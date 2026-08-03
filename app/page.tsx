@@ -73,11 +73,13 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
       const transformedData: FeatureCollection = {
         type: 'FeatureCollection',
-        features: data.features.map((feature: Feature): Feature => ({
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: feature.properties,
-        })),
+        features: data.features.map(
+          (feature: Feature): Feature => ({
+            type: 'Feature',
+            geometry: feature.geometry,
+            properties: feature.properties,
+          }),
+        ),
       };
 
       featureCollections.push(transformedData);
