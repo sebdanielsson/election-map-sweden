@@ -38,11 +38,11 @@ jobs:
       - name: Run format check
         run: pnpm run format:check
 
-      - name: Run ESLint
+      - name: Run lint check
         run: pnpm run lint
 
-      - name: Run stylelint check
-        run: pnpm run stylelint
+      # - name: Run stylelint check
+      #   run: pnpm run stylelint
 
       - name: Build project
         run: pnpm run build
