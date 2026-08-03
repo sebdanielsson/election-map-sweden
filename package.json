@@ -22,14 +22,14 @@
     "axios": "^1.13.5",
     "dotenv": "^17.3.1",
     "mapbox-gl": "^3.18.1",
-    "next": "16.2.12",
+    "next": "16.3.0",
     "proj4": "^2.20.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@dreamsicle.io/stylelint-config-tailwindcss": "^1.2.2",
-    "@next/eslint-plugin-next": "16.2.12",
+    "@next/eslint-plugin-next": "16.3.0",
     "@tailwindcss/webpack": "^4.2.1",
     "@types/geojson": "7946.0.16",
     "@types/node": "^26.0.0",
@@ -44,7 +44,7 @@
     "stylelint-config-html": "^2.0.0",
     "stylelint-config-standard": "^40.0.0",
     "tailwindcss": "^4.2.1",
-    "typescript": "~6.0.0",
+    "typescript": "~7.0.2",
     "typescript-eslint": "^8.56.0",
     "unzipper": "^0.12.3"
   },
