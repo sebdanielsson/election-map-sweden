@@ -9,8 +9,8 @@
     "start": "dotenvx run -f .env.production -- next start",
     "lint": "eslint .",
     "dotenvx": "dotenvx",
-    "download-districts": "bun --bun run scripts/downloadDistricts.ts temp/districts/EPSG3006",
-    "transform-geojson": "bun --bun run scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
+    "download-districts": "pnpm run scripts/downloadDistricts.ts temp/districts/EPSG3006",
+    "transform-geojson": "pnpm run scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "stylelint": "stylelint --allow-empty-input \"app/**/*.css\""
@@ -56,7 +56,4 @@
     "defaults and fully supports es6-module",
     "maintained node versions"
   ],
-  "engines": {
-    "bun": ">=1.3.11"
-  }
 }
