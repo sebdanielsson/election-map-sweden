@@ -1,43 +1,43 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import proj4 from 'proj4';
-import { Feature, FeatureCollection, GeometryObject } from 'geojson';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import proj4 from "proj4";
+import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
 // Define and register the projections
-proj4.defs('EPSG:3006', '+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs');
-proj4.defs('EPSG:4326');
+proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
+proj4.defs("EPSG:4326");
 
 // Transformer
 const transformCoordinate = (coord: [number, number]): [number, number] => {
-  return proj4('EPSG:3006', 'EPSG:4326', coord);
+  return proj4("EPSG:3006", "EPSG:4326", coord);
 };
 
 // Recursive function to transform all coordinates in the GeoJSON
 const transformCoordinates = (geometry: GeometryObject): GeometryObject => {
   switch (geometry.type) {
-    case 'Point':
+    case "Point":
       geometry.coordinates = transformCoordinate(geometry.coordinates as [number, number]);
       break;
-    case 'LineString':
-    case 'MultiPoint':
+    case "LineString":
+    case "MultiPoint":
       geometry.coordinates = (geometry.coordinates as [number, number][]).map(transformCoordinate);
       break;
-    case 'Polygon':
-    case 'MultiLineString':
+    case "Polygon":
+    case "MultiLineString":
       geometry.coordinates = (geometry.coordinates as [number, number][][]).map((ring) =>
         ring.map(transformCoordinate),
       );
       break;
-    case 'MultiPolygon':
+    case "MultiPolygon":
       geometry.coordinates = (geometry.coordinates as [number, number][][][]).map((polygon) =>
         polygon.map((ring) => ring.map(transformCoordinate)),
       );
       break;
-    case 'GeometryCollection':
+    case "GeometryCollection":
       geometry.geometries = geometry.geometries.map(transformCoordinates);
       break;
     default:
-      throw new Error('Unknown Geometry Type');
+      throw new Error("Unknown Geometry Type");
   }
   return geometry;
 };
@@ -46,7 +46,7 @@ const transformCoordinates = (geometry: GeometryObject): GeometryObject => {
 const [, , inputDir, outputDir] = process.argv;
 
 if (!inputDir || !outputDir) {
-  console.error('Please provide input and output directories.');
+  console.error("Please provide input and output directories.");
   process.exit(1);
 }
 
@@ -61,7 +61,7 @@ if (!fs.existsSync(outputDir)) {
 }
 
 // Read all JSON files in the input directory
-const files = fs.readdirSync(inputDir).filter((file) => file.endsWith('.json'));
+const files = fs.readdirSync(inputDir).filter((file) => file.endsWith(".json"));
 
 if (files.length === 0) {
   console.error(`No JSON files found in the directory: ${inputDir}`);
@@ -74,7 +74,7 @@ files.forEach((file) => {
   const outputFilePath = path.join(outputDir, file);
 
   // Load the GeoJSON file
-  const geojson_data: FeatureCollection = JSON.parse(fs.readFileSync(inputFilePath, 'utf8'));
+  const geojson_data: FeatureCollection = JSON.parse(fs.readFileSync(inputFilePath, "utf8"));
 
   // Transform the geometries
   geojson_data.features.forEach((feature: Feature) => {

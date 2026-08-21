@@ -4,48 +4,43 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "dotenvx run -f .env.development -- next dev --turbopack",
-    "build": "dotenvx run -f .env.production -- next build",
-    "start": "dotenvx run -f .env.production -- next start",
-    "lint": "oxlint --type-aware .",
-    "dotenvx": "dotenvx",
-    "download-districts": "pnpm run scripts/downloadDistricts.ts temp/districts/EPSG3006",
-    "transform-geojson": "pnpm run scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
+    "dev": "dotenvx run -f .env.development -- vite",
+    "build": "dotenvx run -f .env.production -- vite build",
+    "preview": "dotenvx run -f .env.production -- vite preview",
+    "typecheck": "tsc -b",
+    "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "stylelint": "stylelint --allow-empty-input \"app/**/*.css\""
+    "dotenvx": "dotenvx",
+    "download-districts": "node --experimental-strip-types scripts/downloadDistricts.ts temp/districts/EPSG3006",
+    "transform-geojson": "node --experimental-strip-types scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts"
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^2.0.0",
-    "@types/unzipper": "^0.10.11",
+    "@fontsource-variable/inter": "^5.2.8",
     "@vercel/speed-insights": "^2.0.0",
-    "axios": "^1.13.5",
-    "dotenv": "^17.3.1",
     "mapbox-gl": "^3.18.1",
-    "next": "16.3.1",
-    "proj4": "^2.20.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@dreamsicle.io/stylelint-config-tailwindcss": "^1.2.2",
-    "@next/eslint-plugin-next": "16.3.1",
-    "@tailwindcss/webpack": "^4.2.1",
+    "@dotenvx/dotenvx": "^2.0.0",
+    "@tailwindcss/vite": "^4.2.1",
     "@types/geojson": "7946.0.16",
     "@types/node": "^26.0.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@types/webpack-env": "^1.18.8",
+    "@types/unzipper": "^0.10.11",
+    "@vitejs/plugin-react": "^6.1.0",
+    "axios": "^1.13.5",
+    "oxc-transform-react": "^0.145.0",
     "oxfmt": "^0.64.0",
     "oxlint": "^1.76.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "postcss": "^8.5.6",
-    "stylelint": "^17.3.0",
-    "stylelint-config-html": "^2.0.0",
-    "stylelint-config-standard": "^40.0.0",
+    "proj4": "^2.20.2",
     "tailwindcss": "^4.2.1",
     "typescript": "~7.0.2",
-    "unzipper": "^0.12.3"
+    "unzipper": "^0.12.3",
+    "vite": "^8.2.2"
   },
   "overrides": {
     "@types/react": "19.2.18",
@@ -58,7 +53,7 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "11.21.0",
+      "version": "11.22.0",
       "onFail": "download"
     },
     "runtime": {
