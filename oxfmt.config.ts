@@ -11,5 +11,4 @@ export default defineConfig({
   /* Point Tailwind class sorting at the v4 entry so it sees this project's own
    * theme, not just the stock utilities. */
   sortTailwindcss: { stylesheet: "src/index.css" },
-  ignorePatterns: ["dist/**", "pnpm-lock.yaml"],
 });
