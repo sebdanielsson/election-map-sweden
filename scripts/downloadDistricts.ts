@@ -40,8 +40,13 @@ if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
+const geoJsonFilesIn = (dir: string) => fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+
 const downloadAndExtract = async (url: string) => {
   const zipFile = path.join(outputDir, path.basename(url));
+  /* Snapshot first: outputDir accumulates across archives, so counting everything in it
+   * afterwards reports a running total rather than what this archive contributed. */
+  const before = new Set(geoJsonFilesIn(outputDir));
 
   const response = await axios({
     url,
@@ -65,13 +70,11 @@ const downloadAndExtract = async (url: string) => {
 
   fs.unlinkSync(zipFile);
 
-  // Log extracted files in the directory
-  const files = fs.readdirSync(outputDir);
-  const geoJsonFiles = files.filter((file) => file.endsWith(".json"));
+  const extracted = geoJsonFilesIn(outputDir).filter((f) => !before.has(f));
 
-  console.log(`Downloaded and extracted ${geoJsonFiles.length} GeoJSON files from ${url}`);
-  if (geoJsonFiles.length === 0) {
-    console.log("Files in directory:", files.join(", "));
+  console.log(`Downloaded and extracted ${extracted.length} GeoJSON files from ${url}`);
+  if (extracted.length === 0) {
+    console.log("Files in directory:", fs.readdirSync(outputDir).join(", "));
   }
 };
 

@@ -108,7 +108,6 @@ export default function App() {
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<mapboxgl.Map | null>(null);
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
-  const [, setRostfordelningData] = useState<Rostfordelning | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -142,6 +141,12 @@ export default function App() {
         // Map is already loaded when we set it in state, so we can proceed directly
         map.resize();
         const featureCollections = await loadGeoJSONFiles();
+        /* loadGeoJSONFiles logs and skips a district it can't fetch, so a total outage comes
+         * back as an empty array. Without this the app clears the spinner and renders a bare
+         * map with no districts and no explanation. */
+        if (featureCollections.length === 0) {
+          throw new Error("No district boundaries could be loaded");
+        }
 
         for (const [index, transformedData] of featureCollections.entries()) {
           const sourceId = `voting-districts-${index}`;
@@ -197,13 +202,12 @@ export default function App() {
           fetchNationalResultsData(),
         ]);
 
-        setRostfordelningData(fetchedRostfordelningData);
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
         );
         setLoading(false);
 
-        map.on("click", async (e) => {
+        map.on("click", (e) => {
           for (const [index] of featureCollections.entries()) {
             const sourceId = `voting-districts-${index}-fill`;
             const features = map.queryRenderedFeatures(e.point, {
