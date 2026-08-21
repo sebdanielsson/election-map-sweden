@@ -43,46 +43,59 @@ if (!fs.existsSync(outputDir)) {
 const downloadAndExtract = async (url: string) => {
   const zipFile = path.join(outputDir, path.basename(url));
 
-  try {
-    const response = await axios({
-      url,
-      method: "GET",
-      responseType: "stream",
-    });
+  const response = await axios({
+    url,
+    method: "GET",
+    responseType: "stream",
+  });
 
-    const writer = fs.createWriteStream(zipFile);
+  const writer = fs.createWriteStream(zipFile);
 
-    response.data.pipe(writer);
+  response.data.pipe(writer);
 
-    await new Promise<void>((resolve, reject) => {
-      writer.on("finish", () => resolve());
-      writer.on("error", (err) => reject(err));
-    });
+  await new Promise<void>((resolve, reject) => {
+    writer.on("finish", () => resolve());
+    writer.on("error", (err) => reject(err));
+  });
 
-    await fs
-      .createReadStream(zipFile)
-      .pipe(unzipper.Extract({ path: outputDir }))
-      .promise();
+  await fs
+    .createReadStream(zipFile)
+    .pipe(unzipper.Extract({ path: outputDir }))
+    .promise();
 
-    fs.unlinkSync(zipFile);
+  fs.unlinkSync(zipFile);
 
-    // Log extracted files in the directory
-    const files = fs.readdirSync(outputDir);
-    const geoJsonFiles = files.filter((file) => file.endsWith(".json"));
+  // Log extracted files in the directory
+  const files = fs.readdirSync(outputDir);
+  const geoJsonFiles = files.filter((file) => file.endsWith(".json"));
 
-    console.log(`Downloaded and extracted ${geoJsonFiles.length} GeoJSON files from ${url}`);
-    if (geoJsonFiles.length === 0) {
-      console.log("Files in directory:", files.join(", "));
-    }
-  } catch (error) {
-    console.error(`Failed to download or extract ${url}:`, error);
+  console.log(`Downloaded and extracted ${geoJsonFiles.length} GeoJSON files from ${url}`);
+  if (geoJsonFiles.length === 0) {
+    console.log("Files in directory:", files.join(", "));
   }
 };
 
+/* Keep going after a failed archive so one bad URL doesn't cost the other twenty, but
+ * remember what failed: a CLI that logs an error and still exits 0 is invisible to
+ * whatever called it. */
 const downloadAllDistricts = async () => {
+  const failed: string[] = [];
   for (const url of districtsUrls) {
-    await downloadAndExtract(url);
+    try {
+      await downloadAndExtract(url);
+    } catch (error) {
+      console.error(`Failed to download or extract ${url}:`, error);
+      failed.push(url);
+    }
+  }
+  if (failed.length > 0) {
+    throw new Error(
+      `${failed.length} of ${districtsUrls.length} archives failed:\n  ${failed.join("\n  ")}`,
+    );
   }
 };
 
-void downloadAllDistricts();
+downloadAllDistricts().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

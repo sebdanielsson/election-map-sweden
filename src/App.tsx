@@ -121,15 +121,18 @@ export default function App() {
       zoom: 5,
     });
 
-    // Set the map in a callback to avoid synchronous setState in effect
+    /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
+     * unmount before Mapbox fires `load`. Without this, cleanup removes the map and the
+     * handler then puts that disposed instance into state, which the effect below would
+     * happily wire handlers onto. */
+    let cancelled = false;
     newMap.on("load", () => {
-      setMap(newMap);
+      if (!cancelled) setMap(newMap);
     });
 
     return () => {
-      if (newMap) {
-        newMap.remove();
-      }
+      cancelled = true;
+      newMap.remove();
     };
   }, []);
 
