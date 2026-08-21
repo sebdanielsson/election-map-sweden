@@ -252,7 +252,13 @@ export default function App() {
               const districtName = feature.properties?.Vdnamn;
 
               if (districtName) {
-                tooltip.setLngLat(e.lngLat).setHTML(`<strong>${districtName}</strong>`).addTo(map);
+                /* District names come from the GeoJSON served out of the public bucket, so
+                 * they are external input. setDOMContent with textContent keeps the bold
+                 * styling that setHTML gave us while making the string impossible to
+                 * interpret as markup. */
+                const label = document.createElement("strong");
+                label.textContent = String(districtName);
+                tooltip.setLngLat(e.lngLat).setDOMContent(label).addTo(map);
               }
               return;
             }
