@@ -136,11 +136,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    /* The work below spans two awaits and then mutates the map and component state. The map
+     * init effect's cleanup calls remove() on unmount — and StrictMode runs that in dev on
+     * every mount — so without this flag a teardown mid-fetch lands addSource/addLayer and
+     * event handlers on a disposed instance. */
+    let cancelled = false;
+
     const loadDataAndSetUpMap = async () => {
       if (map) {
         // Map is already loaded when we set it in state, so we can proceed directly
         map.resize();
         const featureCollections = await loadGeoJSONFiles();
+        if (cancelled) return;
         /* loadGeoJSONFiles logs and skips a district it can't fetch, so a total outage comes
          * back as an empty array. Without this the app clears the spinner and renders a bare
          * map with no districts and no explanation. */
@@ -201,6 +208,7 @@ export default function App() {
           fetchRostfordelningData(),
           fetchNationalResultsData(),
         ]);
+        if (cancelled) return;
 
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
@@ -283,10 +291,15 @@ export default function App() {
      * fetchNationalResultsData both throw on a non-OK response, which would leave the
      * spinner up forever and surface only as an unhandledrejection in the console. */
     loadDataAndSetUpMap().catch((err: unknown) => {
+      if (cancelled) return;
       console.error("Failed to load election data:", err);
       setLoadError("Could not load the election data. Check your connection and reload the page.");
       setLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [map]);
 
   const renderDistrictResults = (
