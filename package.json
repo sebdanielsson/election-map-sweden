@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "dotenvx run -f .env.development -- vite",
-    "build": "tsc -b && dotenvx run -f .env.production -- vite build",
+    "build": "dotenvx run -f .env.production -- vite build",
     "preview": "dotenvx run -f .env.production -- vite preview",
     "typecheck": "tsc -b",
     "lint": "oxlint --deny-warnings",
