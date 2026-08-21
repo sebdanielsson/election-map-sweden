@@ -32,10 +32,10 @@ export interface Valdistrikt {
   forandringValdeltagande: number | null;
   forandringAntalRostberattigade: number | null;
   statusJamforelse: string | null;
-  rostfordelning: Rostfordelning;
+  rostfordelning: ValdistriktRostfordelning;
 }
 
-export interface Rostfordelning {
+export interface ValdistriktRostfordelning {
   rosterPaverkaMandat: RosterPaverkaMandat;
   rosterOvrigaPartier: RosterOvrigaPartier;
   rosterEjPaverkaMandat: RosterEjPaverkaMandat;
@@ -90,13 +90,13 @@ export interface Valomrade {
   forandringValdeltagande: number | null;
   forandringAntalRostberattigade: number | null;
   statusJamforelse: string | null;
-  rostfordelning: Rostfordelning;
+  rostfordelning: ValomradeRostfordelning;
   kvalificeradeForPersonvalLista: KvalificeradFörPersonval[];
-  mandatfordelning: Mandatfordelning;
+  mandatfordelning: ValomradeMandatfordelning;
   valda: Valda;
 }
 
-export interface Rostfordelning {
+export interface ValomradeRostfordelning {
   rosterPaverkaMandat: RosterPaverkaMandat;
   rosterEjPaverkaMandat: RosterEjPaverkaMandat;
 }
@@ -187,7 +187,7 @@ export interface KvalificeradFörPersonval {
   andelPersonroster: number | null;
 }
 
-export interface Mandatfordelning {
+export interface ValomradeMandatfordelning {
   partiLista: PartiMandat[];
 }
 
