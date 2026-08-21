@@ -206,8 +206,8 @@ export default function App() {
               layers: [sourceId],
             });
 
-            if (features.length) {
-              const feature = features[0];
+            const feature = features[0];
+            if (feature) {
               setSelectedDistrict(feature.properties as VotingDistrictProperties);
 
               if (feature.properties && fetchedRostfordelningData) {
@@ -223,7 +223,7 @@ export default function App() {
               const highlightSource = map.getSource("highlight-feature") as mapboxgl.GeoJSONSource;
               highlightSource.setData({
                 type: "FeatureCollection",
-                features: [feature],
+                features: [feature as unknown as Feature],
               });
 
               const sidebar = document.getElementById("sidebar");
@@ -246,8 +246,8 @@ export default function App() {
               layers: [sourceId],
             });
 
-            if (features.length) {
-              const feature = features[0];
+            const feature = features[0];
+            if (feature) {
               const districtName = feature.properties?.Vdnamn;
 
               if (districtName) {
