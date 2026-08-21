@@ -110,6 +110,7 @@ export default function App() {
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
   const [, setRostfordelningData] = useState<Rostfordelning | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -265,7 +266,14 @@ export default function App() {
       }
     };
 
-    void loadDataAndSetUpMap();
+    /* `void` here would discard a rejection: fetchRostfordelningData and
+     * fetchNationalResultsData both throw on a non-OK response, which would leave the
+     * spinner up forever and surface only as an unhandledrejection in the console. */
+    loadDataAndSetUpMap().catch((err: unknown) => {
+      console.error("Failed to load election data:", err);
+      setLoadError("Could not load the election data. Check your connection and reload the page.");
+      setLoading(false);
+    });
   }, [map]);
 
   const renderDistrictResults = (
@@ -300,7 +308,7 @@ export default function App() {
               <tr key={party.partikod}>
                 <td>{party.partiforkortning}</td>
                 <td>{party.andelRoster?.toFixed(2)}</td>
-                <td>{nationalRes ? nationalRes.toFixed(2) : "N/A"}</td>
+                <td>{nationalRes != null ? nationalRes.toFixed(2) : "N/A"}</td>
               </tr>
             );
           })}
@@ -319,7 +327,14 @@ export default function App() {
   return (
     <main className="relative grid h-dvh grid-cols-1 md:p-6">
       <div className="relative flex h-full w-full overflow-hidden">
-        {loading && (
+        {loadError && (
+          <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 p-6 backdrop-blur-md">
+            <p role="alert" className="max-w-md text-center text-sm text-white">
+              {loadError}
+            </p>
+          </div>
+        )}
+        {loading && !loadError && (
           <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 backdrop-blur-md">
             <div
               className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
