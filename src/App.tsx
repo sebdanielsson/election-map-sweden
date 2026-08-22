@@ -1,9 +1,7 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import mapboxgl from 'mapbox-gl';
-import { Feature, FeatureCollection } from 'geojson';
-import {
+import { useEffect, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import type { Feature, FeatureCollection } from "geojson";
+import type {
   Rostfordelning,
   Mandatfordelning,
   PartiRoster,
@@ -14,7 +12,7 @@ import {
     RosterOvrigaPartier,
     RosterEjPaverkaMandat, */
   VotingDistrictProperties,
-} from './electionDataInterfaces';
+} from "./electionDataInterfaces";
 
 const getDistrictResults = (
   rostfordelningData: Rostfordelning,
@@ -28,39 +26,39 @@ const getDistrictResults = (
 };
 
 // Public election data hosted on Backblaze B2 (bucket: election-map-sweden)
-const DATA_BASE_URL = 'https://f001.backblazeb2.com/file/election-map-sweden';
+const DATA_BASE_URL = "https://f001.backblazeb2.com/file/election-map-sweden";
 
 const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
   const response = await fetch(
     `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`,
   );
-  if (!response.ok) throw new Error('Network response was not ok');
+  if (!response.ok) throw new Error("Network response was not ok");
   return response.json();
 };
 
 const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   const fileUrls = [
-    'VD_01_20240313_EU-val_2024.json',
-    'VD_03_20240313_EU-val_2024.json',
-    'VD_04_20240313_EU-val_2024.json',
-    'VD_05_20240313_EU-val_2024.json',
-    'VD_06_20240313_EU-val_2024.json',
-    'VD_07_20240313_EU-val_2024.json',
-    'VD_08_20240313_EU-val_2024.json',
-    'VD_09_20240313_EU-val_2024.json',
-    'VD_10_20240313_EU-val_2024.json',
-    'VD_12_20240313_EU-val_2024.json',
-    'VD_13_20240313_EU-val_2024.json',
-    'VD_14_20240313_EU-val_2024.json',
-    'VD_17_20240313_EU-val_2024.json',
-    'VD_18_20240313_EU-val_2024.json',
-    'VD_19_20240313_EU-val_2024.json',
-    'VD_20_20240313_EU-val_2024.json',
-    'VD_21_20240313_EU-val_2024.json',
-    'VD_22_20240313_EU-val_2024.json',
-    'VD_23_20240313_EU-val_2024.json',
-    'VD_24_20240313_EU-val_2024.json',
-    'VD_25_20240313_EU-val_2024.json',
+    "VD_01_20240313_EU-val_2024.json",
+    "VD_03_20240313_EU-val_2024.json",
+    "VD_04_20240313_EU-val_2024.json",
+    "VD_05_20240313_EU-val_2024.json",
+    "VD_06_20240313_EU-val_2024.json",
+    "VD_07_20240313_EU-val_2024.json",
+    "VD_08_20240313_EU-val_2024.json",
+    "VD_09_20240313_EU-val_2024.json",
+    "VD_10_20240313_EU-val_2024.json",
+    "VD_12_20240313_EU-val_2024.json",
+    "VD_13_20240313_EU-val_2024.json",
+    "VD_14_20240313_EU-val_2024.json",
+    "VD_17_20240313_EU-val_2024.json",
+    "VD_18_20240313_EU-val_2024.json",
+    "VD_19_20240313_EU-val_2024.json",
+    "VD_20_20240313_EU-val_2024.json",
+    "VD_21_20240313_EU-val_2024.json",
+    "VD_22_20240313_EU-val_2024.json",
+    "VD_23_20240313_EU-val_2024.json",
+    "VD_24_20240313_EU-val_2024.json",
+    "VD_25_20240313_EU-val_2024.json",
   ];
 
   const featureCollections: FeatureCollection[] = [];
@@ -68,13 +66,13 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
   for (const url of fileUrls) {
     try {
       const response = await fetch(`${DATA_BASE_URL}/data/districts/EPSG4326/${url}`);
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) throw new Error("Network response was not ok");
       const data = await response.json();
 
       const transformedData: FeatureCollection = {
-        type: 'FeatureCollection',
+        type: "FeatureCollection",
         features: data.features.map((feature: Feature): Feature => ({
-          type: 'Feature',
+          type: "Feature",
           geometry: feature.geometry,
           properties: feature.properties,
         })),
@@ -82,7 +80,7 @@ const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
 
       featureCollections.push(transformedData);
     } catch (error) {
-      console.error('Error fetching GeoJSON data:', error);
+      console.error("Error fetching GeoJSON data:", error);
     }
   }
 
@@ -93,99 +91,116 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   const response = await fetch(
     `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`,
   );
-  if (!response.ok) throw new Error('Network response was not ok');
+  if (!response.ok) throw new Error("Network response was not ok");
   return response.json();
 };
 
 const closeSidebar = () => {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar && !sidebar.classList.contains('translate-x-full')) {
-    sidebar.classList.add('translate-x-full');
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar && !sidebar.classList.contains("translate-x-full")) {
+    sidebar.classList.add("translate-x-full");
   }
 };
 
-export default function Home() {
+export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<mapboxgl.Map | null>(null);
-  const [rostfordelningData, setRostfordelningData] = useState<Rostfordelning | null>(null);
+  // Only the setter is used; the parsed data is passed straight into getDistrictResults().
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
     const newMap = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/standard',
+      container: "map",
+      style: "mapbox://styles/mapbox/standard",
       center: [16.325556, 62.3875],
       zoom: 5,
     });
 
-    // Set the map in a callback to avoid synchronous setState in effect
-    newMap.on('load', () => {
-      setMap(newMap);
+    /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
+     * unmount before Mapbox fires `load`. Without this, cleanup removes the map and the
+     * handler then puts that disposed instance into state, which the effect below would
+     * happily wire handlers onto. */
+    let cancelled = false;
+    newMap.on("load", () => {
+      if (!cancelled) setMap(newMap);
     });
 
     return () => {
-      if (newMap) {
-        newMap.remove();
-      }
+      cancelled = true;
+      newMap.remove();
     };
   }, []);
 
   useEffect(() => {
+    /* The work below spans two awaits and then mutates the map and component state. The map
+     * init effect's cleanup calls remove() on unmount — and StrictMode runs that in dev on
+     * every mount — so without this flag a teardown mid-fetch lands addSource/addLayer and
+     * event handlers on a disposed instance. */
+    let cancelled = false;
+
     const loadDataAndSetUpMap = async () => {
       if (map) {
         // Map is already loaded when we set it in state, so we can proceed directly
         map.resize();
         const featureCollections = await loadGeoJSONFiles();
+        if (cancelled) return;
+        /* loadGeoJSONFiles logs and skips a district it can't fetch, so a total outage comes
+         * back as an empty array. Without this the app clears the spinner and renders a bare
+         * map with no districts and no explanation. */
+        if (featureCollections.length === 0) {
+          throw new Error("No district boundaries could be loaded");
+        }
 
         for (const [index, transformedData] of featureCollections.entries()) {
           const sourceId = `voting-districts-${index}`;
           map.addSource(sourceId, {
-            type: 'geojson',
+            type: "geojson",
             data: transformedData,
           });
 
           map.addLayer({
             id: `${sourceId}-fill`,
-            type: 'fill',
+            type: "fill",
             source: sourceId,
             layout: {},
             paint: {
-              'fill-color': '#006AA7',
-              'fill-opacity': 0.5,
+              "fill-color": "#006AA7",
+              "fill-opacity": 0.5,
             },
           });
 
           map.addLayer({
             id: `${sourceId}-outline`,
-            type: 'line',
+            type: "line",
             source: sourceId,
             layout: {},
             paint: {
-              'line-color': '#000000',
-              'line-width': 0.5,
+              "line-color": "#000000",
+              "line-width": 0.5,
             },
           });
         }
 
-        map.addSource('highlight-feature', {
-          type: 'geojson',
+        map.addSource("highlight-feature", {
+          type: "geojson",
           data: {
-            type: 'FeatureCollection',
+            type: "FeatureCollection",
             features: [],
           },
         });
 
         map.addLayer({
-          id: 'voting-districts-highlight',
-          type: 'fill',
-          source: 'highlight-feature',
+          id: "voting-districts-highlight",
+          type: "fill",
+          source: "highlight-feature",
           layout: {},
           paint: {
-            'fill-color': '#FECC02',
-            'fill-opacity': 0.5,
+            "fill-color": "#FECC02",
+            "fill-opacity": 0.5,
           },
         });
 
@@ -193,22 +208,22 @@ export default function Home() {
           fetchRostfordelningData(),
           fetchNationalResultsData(),
         ]);
+        if (cancelled) return;
 
-        setRostfordelningData(fetchedRostfordelningData);
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
         );
         setLoading(false);
 
-        map.on('click', async (e) => {
+        map.on("click", (e) => {
           for (const [index] of featureCollections.entries()) {
             const sourceId = `voting-districts-${index}-fill`;
             const features = map.queryRenderedFeatures(e.point, {
               layers: [sourceId],
             });
 
-            if (features.length) {
-              const feature = features[0];
+            const feature = features[0];
+            if (feature) {
               setSelectedDistrict(feature.properties as VotingDistrictProperties);
 
               if (feature.properties && fetchedRostfordelningData) {
@@ -218,18 +233,18 @@ export default function Home() {
                 );
                 setDistrictResults(results);
               } else {
-                console.error('No properties found for the selected district');
+                console.error("No properties found for the selected district");
               }
 
-              const highlightSource = map.getSource('highlight-feature') as mapboxgl.GeoJSONSource;
+              const highlightSource = map.getSource("highlight-feature") as mapboxgl.GeoJSONSource;
               highlightSource.setData({
-                type: 'FeatureCollection',
-                features: [feature],
+                type: "FeatureCollection",
+                features: [feature as unknown as Feature],
               });
 
-              const sidebar = document.getElementById('sidebar');
-              if (sidebar && sidebar.classList.contains('translate-x-full')) {
-                sidebar.classList.remove('translate-x-full');
+              const sidebar = document.getElementById("sidebar");
+              if (sidebar && sidebar.classList.contains("translate-x-full")) {
+                sidebar.classList.remove("translate-x-full");
               }
             }
           }
@@ -240,19 +255,25 @@ export default function Home() {
           closeOnClick: false,
         });
 
-        map.on('mousemove', (e) => {
+        map.on("mousemove", (e) => {
           for (const [index] of featureCollections.entries()) {
             const sourceId = `voting-districts-${index}-fill`;
             const features = map.queryRenderedFeatures(e.point, {
               layers: [sourceId],
             });
 
-            if (features.length) {
-              const feature = features[0];
+            const feature = features[0];
+            if (feature) {
               const districtName = feature.properties?.Vdnamn;
 
               if (districtName) {
-                tooltip.setLngLat(e.lngLat).setHTML(`<strong>${districtName}</strong>`).addTo(map);
+                /* District names come from the GeoJSON served out of the public bucket, so
+                 * they are external input. setDOMContent with textContent keeps the bold
+                 * styling that setHTML gave us while making the string impossible to
+                 * interpret as markup. */
+                const label = document.createElement("strong");
+                label.textContent = String(districtName);
+                tooltip.setLngLat(e.lngLat).setDOMContent(label).addTo(map);
               }
               return;
             }
@@ -260,13 +281,25 @@ export default function Home() {
           tooltip.remove();
         });
 
-        map.on('error', (e) => {
-          console.error('Map error:', e);
+        map.on("error", (e) => {
+          console.error("Map error:", e);
         });
       }
     };
 
-    loadDataAndSetUpMap();
+    /* `void` here would discard a rejection: fetchRostfordelningData and
+     * fetchNationalResultsData both throw on a non-OK response, which would leave the
+     * spinner up forever and surface only as an unhandledrejection in the console. */
+    loadDataAndSetUpMap().catch((err: unknown) => {
+      if (cancelled) return;
+      console.error("Failed to load election data:", err);
+      setLoadError("Could not load the election data. Check your connection and reload the page.");
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [map]);
 
   const renderDistrictResults = (
@@ -301,7 +334,7 @@ export default function Home() {
               <tr key={party.partikod}>
                 <td>{party.partiforkortning}</td>
                 <td>{party.andelRoster?.toFixed(2)}</td>
-                <td>{nationalRes ? nationalRes.toFixed(2) : 'N/A'}</td>
+                <td>{nationalRes != null ? nationalRes.toFixed(2) : "N/A"}</td>
               </tr>
             );
           })}
@@ -320,7 +353,14 @@ export default function Home() {
   return (
     <main className="relative grid h-dvh grid-cols-1 md:p-6">
       <div className="relative flex h-full w-full overflow-hidden">
-        {loading && (
+        {loadError && (
+          <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 p-6 backdrop-blur-md">
+            <p role="alert" className="max-w-md text-center text-sm text-white">
+              {loadError}
+            </p>
+          </div>
+        )}
+        {loading && !loadError && (
           <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 backdrop-blur-md">
             <div
               className="absolute h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"

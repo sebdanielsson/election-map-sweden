@@ -1,8 +1,8 @@
 ---
 name: CI
+
 permissions:
   contents: read
-  pull-requests: write
 
 on:
   push:
@@ -13,6 +13,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-24.04-arm
@@ -21,18 +25,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # Installs pnpm from devEngines.packageManager, Node from devEngines.runtime,
+      # and runs pnpm install — so the versions live in package.json, not here.
       - uses: pnpm/setup@v2
         with:
           cache: true
 
       - name: Run format check
-        run: pnpm run format:check
+        run: pnpm run fmt:check
 
       - name: Run lint check
         run: pnpm run lint
 
-      # - name: Run stylelint check
-      #   run: pnpm run stylelint
+      - name: Run typecheck
+        run: pnpm run typecheck
 
       - name: Build project
         run: pnpm run build

@@ -4,48 +4,44 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "dotenvx run -f .env.development -- next dev --turbopack",
-    "build": "dotenvx run -f .env.production -- next build",
-    "start": "dotenvx run -f .env.production -- next start",
-    "lint": "oxlint --type-aware .",
+    "dev": "dotenvx run -f .env.development -- vite",
+    "build": "dotenvx run -f .env.production -- vite build",
+    "preview": "dotenvx run -f .env.production -- vite preview",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc -b",
+    "check": "pnpm run fmt:check && pnpm run lint && pnpm run typecheck",
     "dotenvx": "dotenvx",
-    "download-districts": "pnpm run scripts/downloadDistricts.ts temp/districts/EPSG3006",
-    "transform-geojson": "pnpm run scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check",
-    "stylelint": "stylelint --allow-empty-input \"app/**/*.css\""
+    "download-districts": "node --experimental-strip-types scripts/downloadDistricts.ts temp/districts/EPSG3006",
+    "transform-geojson": "node --experimental-strip-types scripts/transformGeojson.ts temp/districts/EPSG3006 public/data/districts"
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^2.0.0",
-    "@types/unzipper": "^0.10.11",
+    "@fontsource-variable/inter": "^5.3.0",
     "@vercel/speed-insights": "^2.0.0",
-    "axios": "^1.13.5",
-    "dotenv": "^17.3.1",
-    "mapbox-gl": "^3.18.1",
-    "next": "16.3.1",
-    "proj4": "^2.20.2",
+    "mapbox-gl": "^3.29.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@dreamsicle.io/stylelint-config-tailwindcss": "^1.2.2",
-    "@next/eslint-plugin-next": "16.3.1",
-    "@tailwindcss/webpack": "^4.2.1",
+    "@dotenvx/dotenvx": "^2.21.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/geojson": "7946.0.16",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@types/webpack-env": "^1.18.8",
+    "@types/unzipper": "^0.10.11",
+    "@vitejs/plugin-react": "^6.1.0",
+    "axios": "^1.19.0",
+    "oxc-transform-react": "^0.145.0",
     "oxfmt": "^0.64.0",
-    "oxlint": "^1.76.0",
+    "oxlint": "^1.79.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "postcss": "^8.5.6",
-    "stylelint": "^17.3.0",
-    "stylelint-config-html": "^2.0.0",
-    "stylelint-config-standard": "^40.0.0",
-    "tailwindcss": "^4.2.1",
+    "proj4": "^2.21.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
-    "unzipper": "^0.12.3"
+    "unzipper": "^0.12.5",
+    "vite": "^8.2.2"
   },
   "overrides": {
     "@types/react": "19.2.18",
@@ -58,12 +54,12 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "11.21.0",
+      "version": "11.22.0",
       "onFail": "download"
     },
     "runtime": {
       "name": "node",
-      "version": "^24.18.0",
+      "version": "^24.19.0",
       "onFail": "download"
     }
   },
