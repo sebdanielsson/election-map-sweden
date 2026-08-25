@@ -33,7 +33,7 @@
     "@types/unzipper": "^0.10.11",
     "@vitejs/plugin-react": "^6.1.0",
     "axios": "^1.19.0",
-    "oxc-transform-react": "^0.145.0",
+    "oxc-transform-react": "^0.147.0",
     "oxfmt": "^0.64.0",
     "oxlint": "^1.79.0",
     "oxlint-tsgolint": "^7.0.2001",
