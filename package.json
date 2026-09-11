@@ -28,8 +28,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/geojson": "7946.0.16",
     "@types/node": "^26.2.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@types/unzipper": "^0.10.11",
     "@vitejs/plugin-react": "^6.1.0",
     "axios": "^1.19.0",
@@ -44,8 +44,8 @@
     "vite": "^8.2.2"
   },
   "overrides": {
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7"
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
   },
   "browserslist": [
     "defaults and fully supports es6-module",
