@@ -144,10 +144,11 @@ export default function App() {
       createdMap = newMap;
 
       /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
-       * long-lived error handler — has not run yet. Without this, a style that never arrives
-       * (expired or invalid token, 401, offline) spins forever and logs nothing. Note there is
-       * no setLoading(false) here: the spinner is already hidden whenever loadError is set, and
-       * leaving `loading` alone is what lets it come back if the style turns out to be fine. */
+       * long-lived error handler — has not run yet. Mapbox does log such a failure itself (see
+       * below), but nothing reaches the user: a style that never arrives — expired or invalid
+       * token, 401, offline — just spins forever. Note there is no setLoading(false) here: the
+       * spinner is already hidden whenever loadError is set, and leaving `loading` alone is
+       * what lets it come back if the style turns out to be fine. */
       const onPreLoadError = (e: MapboxErrorEvent) => {
         if (cancelled) return;
         console.error("Failed to load the map style:", e.error ?? e);
