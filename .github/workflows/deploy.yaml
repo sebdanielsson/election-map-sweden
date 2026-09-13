@@ -1,0 +1,200 @@
+---
+name: Deploy
+
+# Builds here and deploys the result to Vercel, instead of letting Vercel's Git integration
+# build and deploy on every push (`git.deploymentEnabled: false` in vercel.json turns that off).
+#
+# main goes straight to production. Every pull request gets a preview, and its URL is posted
+# once on the PR and updated in place afterwards.
+#
+# Why this exists: the Git integration deploys on every push with no way to say "not this one".
+# PR #781 pushed 32 commits in an afternoon and burned 32 deployments against a daily cap.
+# `cancel-in-progress` below is the part that actually saves them — a burst of pushes now
+# produces one deployment for the last commit instead of one per commit. Building here rather
+# than on Vercel also means the build is the same one CI already ran.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Per ref, cancelling in progress: pushing three times in a minute should cost one
+  # deployment, not three. Production is grouped per ref too, so a rapid merge sequence
+  # collapses the same way.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # Same-repository events only. GitHub withholds secrets from `pull_request` runs on forks,
+    # so a fork would fail the credentials check on every push — and more to the point, this
+    # job runs the checked-out branch's build scripts with VERCEL_TOKEN in the environment.
+    # That is fine for branches in this repository, whose authors already have the secrets, and
+    # is not something to offer an arbitrary fork.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Only for the preview-URL comment below.
+      pull-requests: write
+    steps:
+      - name: Fail early if the Vercel credentials are missing
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing — see .github/workflows/deploy.yaml"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: pnpm/setup@v2
+        with:
+          cache: true
+
+      - name: Install Vercel CLI
+        # Into a scratch directory outside the repository, not globally: `pnpm add --global`
+        # needs a global bin directory that `pnpm/setup` does not configure, and it failed
+        # immediately on the first run with the secrets in place. Installing here also keeps
+        # package.json and the lockfile untouched, so the tree the build sees is the tree that
+        # was committed.
+        #
+        # Pinned: an unpinned CLI changes how this workflow builds and deploys with no commit
+        # here to explain it.
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vercel-cli"
+          cd "$RUNNER_TEMP/vercel-cli"
+          pnpm init >/dev/null
+          pnpm add vercel@48.2.11
+          echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # Environment is decided once and reused, so the pull, the build and the deploy cannot
+      # disagree about which one they are targeting.
+      - name: Resolve target environment
+        id: target
+        env:
+          # Read from the environment, not interpolated into the script. workflow_dispatch can
+          # run on any branch, and a branch name containing shell metacharacters would
+          # otherwise be pasted straight into this `if` as source.
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" = "refs/heads/main" ] && [ "$EVENT" != "pull_request" ]; then
+            echo "environment=production" >> "$GITHUB_OUTPUT"
+            echo "prod_flag=--prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=preview" >> "$GITHUB_OUTPUT"
+            echo "prod_flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull Vercel project settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          vercel pull --yes \
+            --environment="${{ steps.target.outputs.environment }}" \
+            --token="$VERCEL_TOKEN"
+
+      - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # The build runs `dotenvx run -f .env.production -- vite build`, which needs the
+          # matching private key to decrypt VITE_MAPBOX_ACCESS_TOKEN. `vercel pull` brings it
+          # down when it is set as a Vercel environment variable, which is how the current
+          # Vercel builds get it. Note the build command is hardwired to `.env.production` in
+          # every environment, so a preview run needs the *production* key even though it
+          # pulled the preview environment — if that key is only set on Vercel's production
+          # environment, previews need this repository secret. Left optional rather than
+          # required because the assertion below is what actually catches its absence, with a
+          # message, instead of failing here on a setup that may not need it.
+          DOTENV_PRIVATE_KEY_PRODUCTION: ${{ secrets.DOTENV_PRIVATE_KEY_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          vercel build ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN"
+          # A build that produces nothing would otherwise deploy an empty site over a working
+          # one. Checked before anything is uploaded.
+          test -s .vercel/output/static/index.html || {
+            echo "::error::Build produced no .vercel/output/static/index.html — refusing to deploy"
+            exit 1
+          }
+          # dotenvx does NOT fail when it cannot decrypt: without the private key the build
+          # succeeds and simply leaves VITE_MAPBOX_ACCESS_TOKEN unset, producing a bundle that
+          # deploys green and renders a blank map. Verified locally — `pnpm run build` with no
+          # key exits 0 and embeds no token. So the token is asserted into the output rather
+          # than assumed, and the grep is for the shape, never the value.
+          if ! grep -rqE 'pk\.eyJ[A-Za-z0-9._-]+' .vercel/output/static/assets/*.js; then
+            echo "::error::Built bundle carries no Mapbox token — DOTENV_PRIVATE_KEY_PRODUCTION is probably missing, and deploying this would ship a blank map"
+            exit 1
+          fi
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          url=$(vercel deploy --prebuilt ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
+          # `vercel deploy` prints the URL on stdout and progress on stderr, so this is the URL
+          # and nothing else. Empty means the deploy did not produce one, which is a failure
+          # even if the CLI exited 0.
+          [ -n "$url" ] || { echo "::error::Deploy returned no URL"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      # One comment per PR, edited in place: a new comment on every push would bury the
+      # conversation under deployment notices.
+      - name: Comment the preview URL
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: vercel-preview
+          message: |
+            **Preview deployment**
+
+            ${{ steps.deploy.outputs.url }}
+
+            Built and deployed from GitHub Actions (commit ${{ github.sha }}).
+
+      - name: Summary
+        if: always()
+        env:
+          ENVIRONMENT: ${{ steps.target.outputs.environment }}
+          URL: ${{ steps.deploy.outputs.url }}
+          STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### Deploy"
+            echo ""
+            if [ "$STATUS" = "success" ]; then
+              echo "Deployed to **$ENVIRONMENT**: $URL"
+            else
+              echo "**Deploy failed.** See the failing step above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

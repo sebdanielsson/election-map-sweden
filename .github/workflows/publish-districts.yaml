@@ -1,0 +1,187 @@
+---
+name: Publish district geometry
+
+# Downloads an election's valdistrikt archives from val.se, reprojects them to EPSG:4326 and
+# publishes them to the bucket the app reads.
+#
+# Manual only. District boundaries change once per election, not once per hour, so there is
+# nothing to poll for — and this moves a few hundred megabytes, which is not something to do
+# on a schedule by accident.
+#
+# It exists because the geometry cannot be published from a laptop: the bucket credentials
+# live here as secrets and nowhere else. Without it, adding an election means asking someone
+# to run two scripts locally and upload the output by hand, which is exactly the kind of
+# undocumented manual step that goes wrong the one night it matters.
+#
+# Uses the same four secrets as update-election-data.yaml.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      election:
+        description: "Election id from scripts/elections.ts (e.g. riksdag-2026)"
+        required: true
+        default: riksdag-2026
+      destination:
+        description: "Directory under data/districts/ (blank = the election id)"
+        required: false
+
+concurrency:
+  # Never two at once: they would race the same objects.
+  group: publish-districts
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    # 21 archives, a few hundred MB, plus reprojection of ~6300 districts.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: pnpm/setup@v2
+        with:
+          cache: true
+
+      - name: Fail early if the bucket credentials are missing
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_S3_ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_S3_ENDPOINT; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+
+      # Rejects an unknown id by name rather than failing later with a missing directory.
+      - name: Download district archives
+        env:
+          ELECTION: ${{ inputs.election }}
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/downloadDistricts.ts "$ELECTION" "temp/districts/$ELECTION"
+          ls -la "temp/districts/$ELECTION"
+
+      # Reprojects to EPSG:4326 and refuses on a missing, duplicated or malformed district code.
+      - name: Reproject and validate
+        env:
+          ELECTION: ${{ inputs.election }}
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/transformGeojson.ts \
+            "temp/districts/$ELECTION" "publish/districts/$ELECTION"
+          ls -la "publish/districts/$ELECTION"
+
+      # The transform refuses a partial set, so this is a second opinion rather than the only
+      # check — but publishing 20 counties out of 21 is the failure that would be hardest to
+      # notice on the map, so it is worth asserting twice.
+      - name: Assert a complete set
+        env:
+          ELECTION: ${{ inputs.election }}
+        run: |
+          set -euo pipefail
+          expected=$(node --experimental-strip-types -e '
+            import { getElection } from "./scripts/elections.ts";
+            process.stdout.write(String(getElection(process.env.ELECTION).districtUrls.length));
+          ')
+          actual=$(find "publish/districts/$ELECTION" -maxdepth 1 -name '*.json' | wc -l | tr -d '[:space:]')
+          echo "expected $expected county files, found $actual"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Expected $expected county files, found $actual — refusing to publish a partial map"
+            exit 1
+          fi
+
+      # Gzipped at rest with Content-Encoding set, because B2 does not compress on the fly and
+      # this geometry is the largest thing the app downloads.
+      - name: Compress
+        env:
+          ELECTION: ${{ inputs.election }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # gzip and mv are separate statements on purpose: joined with && they sit on the left
+          # of a list, which `set -e` exempts, so a failed gzip would upload plain JSON labelled
+          # Content-Encoding: gzip and break the app in the browser behind a green run.
+          for f in "publish/districts/$ELECTION"/*.json; do
+            gzip -9 -c "$f" > "$f.gz"
+            mv "$f.gz" "$f"
+            file "$f" | grep -q 'gzip compressed' || {
+              echo "::error::$f is not gzip after compression"
+              exit 1
+            }
+          done
+          du -sh "publish/districts/$ELECTION"
+
+      - name: Upload to Backblaze
+        env:
+          # Via env, never interpolated into the script text: a secret containing a quote or
+          # $(...) would otherwise be executed by the shell.
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          BUCKET: ${{ secrets.B2_BUCKET }}
+          ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+          ELECTION: ${{ inputs.election }}
+          DESTINATION: ${{ inputs.destination }}
+        run: |
+          set -euo pipefail
+          # No part of the endpoint is echoed: Actions masks the exact secret string, so
+          # printing a substring of it would defeat the masking.
+          case "$ENDPOINT" in
+            https://*) ;;
+            *) echo "::error::B2_S3_ENDPOINT must start with https://"; exit 1 ;;
+          esac
+          host=${ENDPOINT#https://}
+          host=${host%%/*}
+          # A regex, not a glob: a glob's * matches URL punctuation, and the URL parser stops at
+          # that punctuation while the glob does not, so `https://s3.evil?x.backblazeb2.com`
+          # would validate as Backblaze and connect to s3.evil.
+          if [[ ! "$host" =~ ^s3\.([a-z0-9-]+)\.backblazeb2\.com$ ]]; then
+            echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host"
+            exit 1
+          fi
+          AWS_DEFAULT_REGION="${BASH_REMATCH[1]}"
+          export AWS_DEFAULT_REGION
+          echo "Region: $AWS_DEFAULT_REGION"
+
+          dest="${DESTINATION:-$ELECTION}"
+          # The destination is a path segment in a public URL, so it may not wander out of the
+          # prefix it is supposed to sit in.
+          case "$dest" in
+            "" | */* | .*) echo "::error::destination must be a single plain directory name"; exit 1 ;;
+          esac
+          echo "Publishing to data/districts/$dest/"
+
+          aws s3 cp "publish/districts/$ELECTION" "s3://$BUCKET/data/districts/$dest" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --content-type application/json \
+            --content-encoding gzip \
+            --cache-control "public, max-age=31536000, immutable"
+
+      - name: Summary
+        if: always()
+        env:
+          ELECTION: ${{ inputs.election }}
+          DESTINATION: ${{ inputs.destination }}
+          STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### District geometry"
+            echo ""
+            if [ "$STATUS" = "success" ]; then
+              echo "Published \`$ELECTION\` to \`data/districts/${DESTINATION:-$ELECTION}/\`."
+            else
+              echo "**Run failed — nothing was published.** See the failing step above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
