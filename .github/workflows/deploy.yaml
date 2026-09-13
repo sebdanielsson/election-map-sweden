@@ -15,6 +15,12 @@ name: Deploy
 # workflow goes green, flip vercel.json back to `"deploymentEnabled": false` so main is not
 # deployed twice.
 #
+# The several false patterns beside `"main": true` there are not redundancy for its own sake.
+# Unlisted branches default to *enabled*, and `"*": false` alone does not cover a branch whose
+# name contains a slash — this branch, `claude/unblock-prod`, deployed a preview on the very
+# commit that added that rule. Only `main` is ever true, so an extra false pattern can never
+# switch a deployment on; a missing one is what switches previews back on by accident.
+#
 # Why this exists: the Git integration deploys on every push with no way to say "not this one".
 # PR #781 pushed 32 commits in an afternoon and burned 32 deployments against a daily cap.
 # `cancel-in-progress` below is the part that actually saves them — a burst of pushes now
