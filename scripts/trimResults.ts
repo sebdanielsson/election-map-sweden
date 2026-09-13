@@ -210,18 +210,33 @@ const trimmed = {
     const parties = paverkaMandat.partiRoster;
     if (parties.length === 0) withoutParties += 1;
     for (const party of parties) {
-      if (!party.partikod) continue;
+      /* Validated here, not only where the rows are emitted below. This lookup runs first
+       * and calls .trim() on the name while choosing a winner, so a drifted non-string would
+       * throw a bare TypeError out of the map callback — a stack trace instead of the clear
+       * refusal every other malformed field gets. The per-row guards would have caught it a
+       * few lines later; they never get the chance. */
+      const partikod = stringOrNull(
+        party.partikod,
+        `district ${district.valdistriktskod ?? "(no code)"} partikod`,
+      );
+      if (!partikod) continue;
+      const candidate = {
+        partiforkortning: stringOrNull(
+          party.partiforkortning,
+          `district ${district.valdistriktskod ?? "(no code)"} party ${partikod} partiforkortning`,
+        ),
+        partibeteckning: stringOrNull(
+          party.partibeteckning,
+          `district ${district.valdistriktskod ?? "(no code)"} party ${partikod} partibeteckning`,
+        ),
+      };
       /* Best-wins rather than first-wins. The per-row partibeteckning is dropped below, so
        * if the first district that happens to mention a party carries a blank name, a
        * first-wins map would store the blank and the app would fall back to rendering the
        * bare party code — defeating the reason this lookup exists. */
-      const existing = partier.get(party.partikod);
-      const candidate = {
-        partiforkortning: party.partiforkortning ?? null,
-        partibeteckning: party.partibeteckning ?? null,
-      };
+      const existing = partier.get(partikod);
       if (!existing || (!existing.partibeteckning?.trim() && candidate.partibeteckning?.trim())) {
-        partier.set(party.partikod, candidate);
+        partier.set(partikod, candidate);
       }
     }
     if (district.valdistriktstyp === "uppsamlingsdistrikt") collectionDistricts += 1;
