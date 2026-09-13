@@ -47,15 +47,28 @@ const getDistrictResults = (
 // Public election data hosted on Backblaze B2 (bucket: election-map-sweden)
 const DATA_BASE_URL = "https://f001.backblazeb2.com/file/election-map-sweden";
 
-/** Thrown when an election's files are simply not in the bucket yet, as opposed to broken. */
-class NotPublishedError extends Error {
-  /* Which half is missing. Results and boundaries arrive by different routes — results on a
+/* The published cadence is about ten minutes, so a minute between attempts feels immediate
+ * without hammering anything, and an hour of them is long enough to cover the wait for the
+ * first results without polling from a tab left open overnight. */
+const RETRY_INTERVAL_MS = 60_000;
+const RETRY_LIMIT = 60;
+
+/** The bucket is not ready yet, as opposed to broken: wait, retry, do not tell anyone to
+ * check their connection. */
+class DataNotReadyError extends Error {
+  /* What is not ready. Results and boundaries arrive by different routes — results on a
    * five-minute poll, boundaries from a manual publish — so "no results yet" is the wrong
-   * thing to tell someone whose results are fine and whose map has never been uploaded. */
-  readonly resource: "results" | "boundaries";
-  constructor(what: string, resource: "results" | "boundaries") {
+   * thing to tell someone whose results are fine and whose map has never been uploaded.
+   *
+   * `mismatch` is a third case and used to be reported as the first: both halves are in the
+   * bucket and they disagree about which snapshot they are, which is what a reader arriving
+   * mid-update sees. Saying "no results have been published" then sends someone looking in
+   * the wrong place for a file that is right there. It resolves itself on the next poll, so
+   * it belongs here with the other two rather than among the errors. */
+  readonly resource: "results" | "boundaries" | "mismatch";
+  constructor(what: string, resource: "results" | "boundaries" | "mismatch") {
     super(what);
-    this.name = "NotPublishedError";
+    this.name = "DataNotReadyError";
     this.resource = resource;
   }
 }
@@ -70,6 +83,39 @@ const fetchJsonOrNull = async (url: string): Promise<unknown> => {
   return response.json();
 };
 
+/* The fields a pair is matched on, after checking they are actually there. Read through this
+ * rather than off the two objects directly: both interfaces declare all four nullable and
+ * Rostfordelning declares the counter optional, so comparing them straight let two files that
+ * were each missing the counter compare equal — `undefined === undefined` — and sail through
+ * the check that exists to catch exactly that. Every file in the bucket carries all four
+ * (checked against the live 2024 and 2026 pairs: counters 1149 and 141, matched within each
+ * pair), so this rejects a shape that has never been published rather than a real one. */
+interface Provenance {
+  valtillfalle: string;
+  valtyp: string;
+  rakningstillfalle: string;
+  antalUppdateringar: number;
+}
+
+const provenanceOf = (file: Rostfordelning | Mandatfordelning, what: string): Provenance => {
+  const { valtillfalle, valtyp, rakningstillfalle, antalUppdateringar } = file;
+  if (
+    typeof valtillfalle !== "string" ||
+    typeof valtyp !== "string" ||
+    typeof rakningstillfalle !== "string" ||
+    typeof antalUppdateringar !== "number"
+  ) {
+    throw new Error(`${what} does not carry the provenance needed to pair it with its other half`);
+  }
+  return { valtillfalle, valtyp, rakningstillfalle, antalUppdateringar };
+};
+
+/* Named in full in the warning: "update 140 vs 141" reads as an off-by-one in this app, and
+ * the identity fields are what tell a torn pair apart from two files describing different
+ * elections entirely. */
+const describeProvenance = (p: Provenance): string =>
+  `${p.valtillfalle}/${p.valtyp}/${p.rakningstillfalle} update ${String(p.antalUppdateringar)}`;
+
 export interface ElectionResults {
   rostfordelning: Rostfordelning;
   mandatfordelning: Mandatfordelning;
@@ -78,6 +124,9 @@ export interface ElectionResults {
 }
 
 const fetchResults = async (election: AppElection): Promise<ElectionResults> => {
+  /* Set when a counting had both halves and they disagreed, so the caller can tell "nothing
+   * published" from "published and mid-update". */
+  let torn = false;
   for (const counting of election.countings) {
     const [rost, mandat] = await Promise.all([
       fetchJsonOrNull(
@@ -109,23 +158,29 @@ const fetchResults = async (election: AppElection): Promise<ElectionResults> => 
        * not: the real 2022 pair is stamped a second apart (14:07:27 against 14:07:28), so
        * requiring those to match would reject a perfectly good pair. The counter matched in
        * both samples checked — 2026 at 3, 2022 at 1215. */
+      const rostProvenance = provenanceOf(rostfordelning, `${counting} rostfordelning`);
+      const mandatProvenance = provenanceOf(mandatfordelning, `${counting} mandatfordelning`);
       const sameSnapshot =
-        rostfordelning.valtillfalle === mandatfordelning.valtillfalle &&
-        rostfordelning.valtyp === mandatfordelning.valtyp &&
-        rostfordelning.rakningstillfalle === mandatfordelning.rakningstillfalle &&
-        rostfordelning.antalUppdateringar === mandatfordelning.antalUppdateringar;
+        rostProvenance.valtillfalle === mandatProvenance.valtillfalle &&
+        rostProvenance.valtyp === mandatProvenance.valtyp &&
+        rostProvenance.rakningstillfalle === mandatProvenance.rakningstillfalle &&
+        rostProvenance.antalUppdateringar === mandatProvenance.antalUppdateringar;
       if (!sameSnapshot) {
+        torn = true;
         console.warn(
           `Skipping ${counting}: rostfordelning and mandatfordelning describe different ` +
-            `snapshots (update ${String(rostfordelning.antalUppdateringar)} vs ` +
-            `${String(mandatfordelning.antalUppdateringar)})`,
+            `snapshots — ${describeProvenance(rostProvenance)} against ` +
+            `${describeProvenance(mandatProvenance)}`,
         );
         continue;
       }
       return { rostfordelning, mandatfordelning, counting };
     }
   }
-  throw new NotPublishedError(election.label, "results");
+  /* Both halves were there and disagreed, which is a different thing from nothing being
+   * published and needs to say so. Still a DataNotReadyError, so it still retries. */
+  if (torn) throw new DataNotReadyError(election.label, "mismatch");
+  throw new DataNotReadyError(election.label, "results");
 };
 
 const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollection[]> => {
@@ -165,7 +220,7 @@ const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollectio
    * different message from a few counties failing, because the first is expected before
    * publication and the second is not. */
   if (missing.length === election.geometryFiles.length) {
-    throw new NotPublishedError(election.label, "boundaries");
+    throw new DataNotReadyError(election.label, "boundaries");
   }
   if (missing.length > 0) {
     throw new Error(
@@ -219,8 +274,14 @@ export default function App() {
   const [notPublished, setNotPublished] = useState<{ label: string; resource: string } | null>(
     null,
   );
-  /* Bumped by the retry timer below; in the data effect's deps so a bump re-runs it. */
+  /* Bumped by the retry timer below; in the data effect's deps so a bump re-runs it. Bumped
+   * only when there is something new to load, because re-running that effect re-parses every
+   * county's geometry and rebuilds every Mapbox layer. */
   const [retryTick, setRetryTick] = useState(0);
+  /* Counted separately from retryTick, which no longer advances once a minute. Deliberately
+   * not in the data effect's deps: it changes on every failed attempt, and that effect is the
+   * expensive one. */
+  const [retryAttempts, setRetryAttempts] = useState(0);
   const [counting, setCounting] = useState<string | null>(null);
   const election: AppElection = electionById(electionId) ?? latestElection();
 
@@ -530,7 +591,7 @@ export default function App() {
       /* "Not published yet" is the expected state for hours on election day and is not an
        * error: it gets its own message and leaves the other elections selectable, rather than
        * telling someone to check a connection that is working fine. */
-      if (err instanceof NotPublishedError) {
+      if (err instanceof DataNotReadyError) {
         setNotPublished({ label: err.message, resource: err.resource });
         setLoading(false);
         return;
@@ -558,24 +619,48 @@ export default function App() {
     };
   }, [map, election, retryTick]);
 
-  /* Retries while something is unpublished, which is the normal state for hours on election
+  /* Retries while something is not ready, which is the normal state for hours on election
    * day. Without this the overlay promised the map would pick up new figures and then never
    * looked again, so a page opened before publication sat there until someone reloaded it.
    *
-   * Only runs when there is something to wait for, and stops after an hour: a tab left open
-   * overnight should not poll the bucket until the battery runs out. The published cadence is
-   * about ten minutes, so a minute between attempts is frequent enough to feel immediate and
-   * far short of hammering anything. */
+   * Missing results are probed first and the data effect is re-run only once they are
+   * actually there. Bumping the tick unconditionally re-ran that effect every minute for an
+   * hour — re-fetching and re-parsing all twenty-one county files and tearing down and
+   * rebuilding every layer on the map, tens of megabytes of JSON, while nothing had changed.
+   * The geometry is already loaded in that case, so the probe is two small files against a
+   * browser cache rather than the whole map again.
+   *
+   * Boundaries are not probed: nothing is loaded when they are missing, so re-running the
+   * effect costs two rounds of 404s and there is nothing cheaper to check first. */
   useEffect(() => {
     if (!notPublished) return;
-    if (retryTick >= 60) return;
+    if (retryAttempts >= RETRY_LIMIT) return;
+    let cancelled = false;
     const timer = setTimeout(() => {
-      setRetryTick((tick) => tick + 1);
-    }, 60_000);
+      if (notPublished.resource === "boundaries") {
+        setRetryTick((tick) => tick + 1);
+        return;
+      }
+      void (async () => {
+        let ready = false;
+        try {
+          await fetchResults(election);
+          ready = true;
+        } catch {
+          /* Still absent, still torn, or briefly unreachable — all of them mean "not yet",
+           * and the data effect is what reports whichever it turns out to be. */
+          ready = false;
+        }
+        if (cancelled) return;
+        if (ready) setRetryTick((tick) => tick + 1);
+        else setRetryAttempts((attempts) => attempts + 1);
+      })();
+    }, RETRY_INTERVAL_MS);
     return () => {
+      cancelled = true;
       clearTimeout(timer);
     };
-  }, [notPublished, retryTick]);
+  }, [notPublished, retryAttempts, election]);
 
   /* The abbreviation is what the table shows, but it is blank for most registered parties —
    * 64 of the 100 in the 2024 file. Fall back to the registered name, then to the code, so a
@@ -671,8 +756,15 @@ export default function App() {
             <p role="status" className="max-w-md text-center text-sm text-white">
               {notPublished.resource === "results"
                 ? `No results have been published for ${notPublished.label} yet.`
-                : `The map boundaries for ${notPublished.label} have not been published yet.`}{" "}
-              Pick an earlier election above, or wait — this page checks again every minute.
+                : notPublished.resource === "boundaries"
+                  ? `The map boundaries for ${notPublished.label} have not been published yet.`
+                  : `The results for ${notPublished.label} are mid-update: the vote counts and the seat allocation in the bucket are from different snapshots, so they are not being shown together.`}{" "}
+              {/* The promise has to stop when the checking does. It used to say "every
+                  minute" unconditionally, so an overlay still on screen after the hour was
+                  up went on claiming it was watching for results it had given up on. */}
+              {retryAttempts >= RETRY_LIMIT
+                ? "Pick an earlier election above, or reload the page to start checking again."
+                : "Pick an earlier election above, or wait — this page checks again every minute for an hour."}
             </p>
           </div>
         )}
@@ -688,6 +780,14 @@ export default function App() {
             value={election.id}
             onChange={(e) => {
               setElectionId(e.target.value);
+              /* A new election starts its own hour. Without this, switching to an election
+                 that has not been published either, after an hour of waiting for the first
+                 one, would show the overlay with the retries already spent and never look
+                 again. Reset here rather than in an effect on `election`: this is the only
+                 thing that changes it — the `?val=` parameter is read once, into the initial
+                 state — and resetting from the event that caused the change is what React
+                 asks for. */
+              setRetryAttempts(0);
               /* Kept in the URL so a particular election can be linked to and survives a
                  reload; the initial state reads it back. */
               const url = new URL(window.location.href);
