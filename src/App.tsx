@@ -14,6 +14,8 @@ import type {
     RosterEjPaverkaMandat, */
   VotingDistrictProperties,
 } from "./electionDataInterfaces";
+import type { AppElection } from "./elections";
+import { electionById, electionsByDate, latestElection, resultFileName } from "./elections";
 
 /* `rosterOvrigaPartier` is a separate bucket from partiRoster — votes for parties below the
  * reporting threshold — so the two have to travel together or any "other parties" total
@@ -45,71 +47,100 @@ const getDistrictResults = (
 // Public election data hosted on Backblaze B2 (bucket: election-map-sweden)
 const DATA_BASE_URL = "https://f001.backblazeb2.com/file/election-map-sweden";
 
-const fetchNationalResultsData = async (): Promise<Mandatfordelning> => {
-  const response = await fetch(
-    `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_mandatfordelning_00_E.json`,
-  );
-  if (!response.ok) throw new Error("Network response was not ok");
+/** Thrown when an election's files are simply not in the bucket yet, as opposed to broken. */
+class NotPublishedError extends Error {
+  constructor(what: string) {
+    super(what);
+    this.name = "NotPublishedError";
+  }
+}
+
+/* 404 is a fact about the world — Valmyndigheten has not published this counting yet — and has
+ * to be distinguishable from a 500 or a dropped connection. Returning null for it lets the
+ * caller try the next counting instead of failing the page. */
+const fetchJsonOrNull = async (url: string): Promise<unknown> => {
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`${url} returned HTTP ${String(response.status)}`);
   return response.json();
 };
 
-const loadGeoJSONFiles = async (): Promise<FeatureCollection[]> => {
-  const fileUrls = [
-    "VD_01_20240313_EU-val_2024.json",
-    "VD_03_20240313_EU-val_2024.json",
-    "VD_04_20240313_EU-val_2024.json",
-    "VD_05_20240313_EU-val_2024.json",
-    "VD_06_20240313_EU-val_2024.json",
-    "VD_07_20240313_EU-val_2024.json",
-    "VD_08_20240313_EU-val_2024.json",
-    "VD_09_20240313_EU-val_2024.json",
-    "VD_10_20240313_EU-val_2024.json",
-    "VD_12_20240313_EU-val_2024.json",
-    "VD_13_20240313_EU-val_2024.json",
-    "VD_14_20240313_EU-val_2024.json",
-    "VD_17_20240313_EU-val_2024.json",
-    "VD_18_20240313_EU-val_2024.json",
-    "VD_19_20240313_EU-val_2024.json",
-    "VD_20_20240313_EU-val_2024.json",
-    "VD_21_20240313_EU-val_2024.json",
-    "VD_22_20240313_EU-val_2024.json",
-    "VD_23_20240313_EU-val_2024.json",
-    "VD_24_20240313_EU-val_2024.json",
-    "VD_25_20240313_EU-val_2024.json",
-  ];
+export interface ElectionResults {
+  rostfordelning: Rostfordelning;
+  mandatfordelning: Mandatfordelning;
+  /** Which counting these came from, so the UI can say whether figures are preliminary. */
+  counting: string;
+}
 
+const fetchResults = async (election: AppElection): Promise<ElectionResults> => {
+  for (const counting of election.countings) {
+    const [rost, mandat] = await Promise.all([
+      fetchJsonOrNull(
+        `${DATA_BASE_URL}/data/election-results/${resultFileName(election, counting, "rost")}`,
+      ),
+      fetchJsonOrNull(
+        `${DATA_BASE_URL}/data/election-results/${resultFileName(election, counting, "mandat")}`,
+      ),
+    ]);
+    /* Both or neither. The publishing workflow refuses to upload half a snapshot, but the two
+     * objects are still written by separate requests, so a run that died between them leaves a
+     * mismatched pair in the bucket. Skipping to the next counting is better than rendering a
+     * preliminary vote count against a final seat allocation. */
+    if (rost && mandat) {
+      return {
+        rostfordelning: rost as Rostfordelning,
+        mandatfordelning: mandat as Mandatfordelning,
+        counting,
+      };
+    }
+  }
+  throw new NotPublishedError(election.label);
+};
+
+const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollection[]> => {
   const featureCollections: FeatureCollection[] = [];
+  const missing: string[] = [];
 
-  for (const url of fileUrls) {
+  for (const file of election.geometryFiles) {
     try {
-      const response = await fetch(`${DATA_BASE_URL}/data/districts/EPSG4326/${url}`);
-      if (!response.ok) throw new Error("Network response was not ok");
-      const data = await response.json();
-
-      const transformedData: FeatureCollection = {
+      const data = await fetchJsonOrNull(
+        `${DATA_BASE_URL}/data/districts/${election.geometryDir}/${file}`,
+      );
+      if (data === null) {
+        missing.push(file);
+        continue;
+      }
+      const collection = data as FeatureCollection;
+      featureCollections.push({
         type: "FeatureCollection",
-        features: data.features.map((feature: Feature): Feature => ({
+        features: collection.features.map((feature: Feature): Feature => ({
           type: "Feature",
           geometry: feature.geometry,
           properties: feature.properties,
         })),
-      };
-
-      featureCollections.push(transformedData);
+      });
     } catch (error) {
-      console.error("Error fetching GeoJSON data:", error);
+      console.error(`Error fetching ${file}:`, error);
+      missing.push(file);
     }
   }
 
-  return featureCollections;
-};
+  /* Every county or none. This used to log a failure and carry on, which drew a map with a
+   * county-shaped hole in it and no indication anything was wrong — the same class of silent
+   * partial as the pipeline's own guards exist to prevent. A whole election missing is a
+   * different message from a few counties failing, because the first is expected before
+   * publication and the second is not. */
+  if (missing.length === election.geometryFiles.length) {
+    throw new NotPublishedError(`${election.label} (district boundaries)`);
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `${String(missing.length)} of ${String(election.geometryFiles.length)} district files ` +
+        `failed to load (${missing.slice(0, 3).join(", ")}…)`,
+    );
+  }
 
-const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
-  const response = await fetch(
-    `${DATA_BASE_URL}/data/election-results/EU-val_2024_slutlig_rostfordelning_00_E.json`,
-  );
-  if (!response.ok) throw new Error("Network response was not ok");
-  return response.json();
+  return featureCollections;
 };
 
 /* This lives at module scope on purpose. oxc's React Compiler — enabled by
@@ -144,6 +175,16 @@ export default function App() {
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /* The election day itself is the common case for this app, so it opens on the newest
+   * election. Before Valmyndigheten publishes anything that election has no results, which is
+   * reported as its own state rather than as an error — "not counted yet" is not a fault. */
+  const [electionId, setElectionId] = useState<string>(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("val");
+    return electionById(fromUrl)?.id ?? latestElection().id;
+  });
+  const [notPublished, setNotPublished] = useState<string | null>(null);
+  const [counting, setCounting] = useState<string | null>(null);
+  const election: AppElection = electionById(electionId) ?? latestElection();
 
   useEffect(() => {
     /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
@@ -235,12 +276,27 @@ export default function App() {
      * every mount — so without this flag a teardown mid-fetch lands addSource/addLayer and
      * event handlers on a disposed instance. */
     let cancelled = false;
+    /* Recorded rather than reconstructed: the cleanup must remove precisely what this run
+     * added, and how many there are depends on how many county files came back. */
+    const addedSourceIds: string[] = [];
+    const addedLayerIds: string[] = [];
 
     const loadDataAndSetUpMap = async () => {
+      /* Cleared at the start of each attempt so a previous election's verdict cannot survive
+       * a switch — selecting 2024 after 2026 came back unpublished must not keep showing that
+       * notice. Inside the async body rather than the effect body so it does not run
+       * synchronously during render. */
+      setNotPublished(null);
+      setLoadError(null);
+      setCounting(null);
+      setSelectedDistrict(null);
+      setDistrictResults(null);
+      setLoading(true);
+
       if (map) {
         // Map is already loaded when we set it in state, so we can proceed directly
         map.resize();
-        const featureCollections = await loadGeoJSONFiles();
+        const featureCollections = await loadGeoJSONFiles(election);
         if (cancelled) return;
         /* loadGeoJSONFiles logs and skips a district it can't fetch, so a total outage comes
          * back as an empty array. Without this the app clears the spinner and renders a bare
@@ -251,6 +307,8 @@ export default function App() {
 
         for (const [index, transformedData] of featureCollections.entries()) {
           const sourceId = `voting-districts-${index}`;
+          addedSourceIds.push(sourceId);
+          addedLayerIds.push(`${sourceId}-fill`, `${sourceId}-outline`);
           map.addSource(sourceId, {
             type: "geojson",
             data: transformedData,
@@ -279,6 +337,8 @@ export default function App() {
           });
         }
 
+        addedSourceIds.push("highlight-feature");
+        addedLayerIds.push("voting-districts-highlight");
         map.addSource("highlight-feature", {
           type: "geojson",
           data: {
@@ -298,11 +358,11 @@ export default function App() {
           },
         });
 
-        const [fetchedRostfordelningData, fetchedNationalResultsData] = await Promise.all([
-          fetchRostfordelningData(),
-          fetchNationalResultsData(),
-        ]);
+        const results = await fetchResults(election);
         if (cancelled) return;
+        const fetchedRostfordelningData = results.rostfordelning;
+        const fetchedNationalResultsData = results.mandatfordelning;
+        setCounting(results.counting);
 
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
@@ -409,6 +469,14 @@ export default function App() {
      * spinner up forever and surface only as an unhandledrejection in the console. */
     loadDataAndSetUpMap().catch((err: unknown) => {
       if (cancelled) return;
+      /* "Not published yet" is the expected state for hours on election day and is not an
+       * error: it gets its own message and leaves the other elections selectable, rather than
+       * telling someone to check a connection that is working fine. */
+      if (err instanceof NotPublishedError) {
+        setNotPublished(err.message);
+        setLoading(false);
+        return;
+      }
       console.error("Failed to load election data:", err);
       setLoadError("Could not load the election data. Check your connection and reload the page.");
       setLoading(false);
@@ -416,8 +484,20 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      /* Switching elections re-runs this effect against the same map, so the previous
+       * election's sources and layers have to go — mapbox rejects addSource on an id that
+       * already exists, and leaving them would draw two sets of boundaries on top of each
+       * other. Removed in dependency order: a source cannot be dropped while a layer still
+       * references it. */
+      if (!map) return;
+      for (const id of addedLayerIds) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      for (const id of addedSourceIds) {
+        if (map.getSource(id)) map.removeSource(id);
+      }
     };
-  }, [map]);
+  }, [map, election]);
 
   /* The abbreviation is what the table shows, but it is blank for most registered parties —
    * 64 of the 100 in the 2024 file. Fall back to the registered name, then to the code, so a
@@ -508,6 +588,50 @@ export default function App() {
             </div>
           </div>
         )}
+        {notPublished && !loadError && (
+          <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 p-6 backdrop-blur-md">
+            <p role="status" className="max-w-md text-center text-sm text-white">
+              No results have been published for {notPublished} yet. Pick an earlier election above,
+              or wait — the map picks up new figures within about ten minutes of publication.
+            </p>
+          </div>
+        )}
+
+        {/* Above the map rather than in the sidebar: the sidebar is hidden until a district is
+            clicked, and the election you are looking at has to be visible before then. */}
+        <div className="absolute top-2 left-2 z-50 flex items-center gap-2 rounded-lg bg-gray-800/60 px-3 py-2 text-white backdrop-blur-md">
+          <label htmlFor="election" className="text-xs font-bold">
+            Election
+          </label>
+          <select
+            id="election"
+            value={election.id}
+            onChange={(e) => {
+              setElectionId(e.target.value);
+              /* Kept in the URL so a particular election can be linked to and survives a
+                 reload; the initial state reads it back. */
+              const url = new URL(window.location.href);
+              url.searchParams.set("val", e.target.value);
+              window.history.replaceState(null, "", url);
+            }}
+            className="rounded bg-gray-900/70 px-2 py-1 text-xs"
+          >
+            {electionsByDate.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {/* Which counting is on screen. Preliminary figures change all evening and the final
+              count lands days later, so showing one as the other is the mistake worth guarding
+              against — the pipeline carries `rakningstillfalle` precisely so this can be said. */}
+          {counting && (
+            <span className="text-xs text-slate-300">
+              {counting === "slutlig" ? "Final count" : "Preliminary count"}
+            </span>
+          )}
+        </div>
+
         <div id="map" className="grow rounded-xl bg-gray-100"></div>
         <div
           id="sidebar"
