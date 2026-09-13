@@ -147,6 +147,15 @@ jobs:
           # mandatfordelning is a couple of hundred kB and carries the seat allocation and
           # the threshold the app reads, so it ships as published.
           for f in verified/*mandatfordelning*.json; do cp "$f" "publish/$(basename "$f")"; done
+          # Both halves must satisfy the provenance contract the app pairs them by, and until
+          # this ran, only one of them ever did: rostfordelning is checked on its way through
+          # trimResults, while mandatfordelning was copied above unexamined. A mandatfordelning
+          # with a missing or null counter therefore uploaded cleanly and made the app reject
+          # the pair at load time — a generic load error in front of the reader, where refusing
+          # here leaves the previous good snapshot in the bucket and the map keeps working on
+          # slightly stale figures. Run over publish/ rather than verified/ so it sees exactly
+          # the bytes that are about to be uploaded.
+          node --experimental-strip-types scripts/checkProvenance.ts publish/*.json
           # Assert the votes landed, not merely that something did: with nullglob an empty
           # rostfordelning glob makes the loop a no-op, and the copied mandatfordelning
           # alone would satisfy a bare "is publish/ non-empty" check.

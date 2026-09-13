@@ -50,6 +50,8 @@ interface RostfordelningIn {
   valdistrikt?: ValdistriktIn[];
 }
 
+import { provenanceProblems as sharedProvenanceProblems } from "./provenance.ts";
+
 const [, , inputFile, outputFile] = process.argv;
 
 if (!inputFile || !outputFile) {
@@ -152,21 +154,23 @@ if (!districts || districts.length === 0) {
  * An explicit null passes: the app's type allows it and it survives serialisation. Only an
  * absent key or a wrong type is refused. Verified present and correctly typed in every real
  * rostfordelning checked — 2022 riksdag and 2024 EU — so this does not reject good input. */
+/* The fields both halves share are checked by scripts/provenance.ts, which mandatfordelning
+ * goes through too — one contract, so the two sides cannot drift apart and publish a file the
+ * app then refuses. Only the district counters are left here: they exist on rostfordelning
+ * alone. */
 const requiredProvenance: [keyof RostfordelningIn, "string" | "number"][] = [
-  ["valtillfalle", "string"],
-  ["valtyp", "string"],
-  ["rakningstillfalle", "string"],
-  ["senasteUppdateringstid", "string"],
   ["antalValdistriktRaknade", "number"],
   ["antalValdistriktSomSkaRaknas", "number"],
 ];
-const provenanceProblems = requiredProvenance.flatMap(([key, kind]) => {
-  if (!Object.hasOwn(source, key)) return [`${key} is absent`];
-  const value = source[key];
-  if (value === null) return [];
-  if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
-  return [];
-});
+const provenanceProblems = sharedProvenanceProblems(source).concat(
+  requiredProvenance.flatMap(([key, kind]) => {
+    if (!Object.hasOwn(source, key)) return [`${key} is absent`];
+    const value = source[key];
+    if (value === null) return [];
+    if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
+    return [];
+  }),
+);
 /* Optional rather than required — no published file has ever carried it — but a present
  * valdatum is copied into the output and typed `string | null` there, so a numeric or object
  * one would be published as an invalid provenance field while every other field on this path
@@ -175,29 +179,6 @@ if (Object.hasOwn(source, "valdatum") && source.valdatum !== null) {
   if (typeof source.valdatum !== "string") {
     provenanceProblems.push(`valdatum is ${typeof source.valdatum}, expected string or null`);
   }
-}
-
-/* Stricter than the list above, which tolerates an explicit null because the app's types do.
- * This one field the app requires to be an actual number, because it is the only field that
- * identifies a snapshot across the pair of files — and two nulls compare equal, which is the
- * vacuous match the app's pairing check exists to prevent. Checking it here rather than only
- * there is what keeps the two sides from disagreeing: without it this script could publish a
- * file the app then refuses, turning a bad upstream field into a broken map instead of a
- * refused upload. Failing closed leaves the previous good snapshot in the bucket, which is
- * the better of the two outcomes on election night.
- *
- * Verified against real input before requiring it: present and numeric in 2022 riksdag
- * (1215), 2024 EU (1149) and 2026 riksdag, so this rejects nothing that has been published. */
-if (typeof source.antalUppdateringar !== "number") {
-  /* `null` reported by name rather than as `typeof`, which calls it "object" — the one value
-   * most likely to turn up here is exactly the one that message would describe worst, and
-   * whoever reads it is reading it because publication stopped. */
-  const kind = !Object.hasOwn(source, "antalUppdateringar")
-    ? "absent"
-    : source.antalUppdateringar === null
-      ? "null"
-      : typeof source.antalUppdateringar;
-  provenanceProblems.push(`antalUppdateringar is ${kind}, expected number`);
 }
 
 if (provenanceProblems.length > 0) {
