@@ -228,17 +228,25 @@ const trimmed = {
           `publish it as if no one voted for a small party`,
       );
     }
-    /* An uncounted district legitimately reports an empty partiRoster, so an empty array is
-     * fine. A *missing* one is not: `?? []` would turn a schema change, or the wrong file
-     * being selected, into an apparently valid snapshot in which every district has no
-     * parties at all — published without complaint. */
-    if (!Array.isArray(paverkaMandat?.partiRoster)) {
+    /* An uncounted district has no `partiRoster` key at all. I had this backwards: this guard
+     * used to require the array and refuse a file without it, reasoning that a missing one
+     * could only mean schema drift. The first real election-night file says otherwise — 6623
+     * of 6626 districts carried no partiRoster because only 3 had been counted — so the guard
+     * rejected the live data outright and the pipeline published nothing.
+     *
+     * The protection it reached for is still worth having; it just cannot be per-district when
+     * "absent" is the normal state for most of the night. It moved to a file-level check
+     * further down: the file states how many districts it counted, and exactly that many must
+     * carry parties. Same fail-closed property, stated against something the file itself
+     * asserts rather than against an assumption of mine. */
+    const rawParties = paverkaMandat?.partiRoster;
+    if (rawParties !== undefined && !Array.isArray(rawParties)) {
       fail(
-        `district ${district.valdistriktskod ?? "(no code)"} has no partiRoster array — ` +
-          `refusing to publish a result file with no results`,
+        `district ${district.valdistriktskod ?? "(no code)"} has a partiRoster that is not an ` +
+          `array — refusing to publish it`,
       );
     }
-    const parties = paverkaMandat.partiRoster;
+    const parties = rawParties ?? [];
     if (parties.length === 0) withoutParties += 1;
     for (const party of parties) {
       /* Validated here, not only where the rows are emitted below. This lookup runs first
@@ -343,6 +351,25 @@ if (missingCode > 0) {
 /* The app looks districts up with .find(), so a duplicate code means the second district's
  * votes are silently never shown. Real files have none — 6589 codes, 6589 unique — which is
  * precisely why a duplicate appearing would be a sign something is wrong upstream. */
+/* What the per-district partiRoster guard used to attempt, stated against the file's own
+ * claim instead of against an assumption. `antalValdistriktRaknade` is how many districts this
+ * snapshot says it counted; exactly that many should carry parties. A mismatch means the file
+ * and its contents disagree, which is the schema drift worth refusing — and unlike "every
+ * district must have partiRoster", it holds at 3 districts counted and at 6626. */
+const districtsWithParties = trimmed.valdistrikt.filter(
+  (d) => (d.rostfordelning.rosterPaverkaMandat.partiRoster.length ?? 0) > 0,
+).length;
+if (
+  typeof source.antalValdistriktRaknade === "number" &&
+  districtsWithParties !== source.antalValdistriktRaknade
+) {
+  fail(
+    `the file reports ${String(source.antalValdistriktRaknade)} districts counted but ` +
+      `${String(districtsWithParties)} carry party results — refusing to publish a snapshot ` +
+      `that disagrees with itself`,
+  );
+}
+
 /* One pass with a Set rather than indexOf per element: the scan-per-district version was
  * ~56 ms on the real 6589 districts against ~1 ms for this, and it is the same answer. */
 /* `string | undefined`, not `string`: that is what the field is declared as, and the

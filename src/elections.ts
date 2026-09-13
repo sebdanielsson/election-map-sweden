@@ -93,7 +93,7 @@ export const ELECTIONS: AppElection[] = [
     date: "2026-09-13",
     geometryDir: "riksdag-2026",
     geometryFiles: RIKSDAG_2026_GEOMETRY,
-    resultPrefix: "Val_20260913",
+    resultPrefix: "Val_2026",
     resultSuffix: "_00_RD",
     /* Final first: once it exists it supersedes the preliminary count, and on election night
      * it simply 404s and the preliminary one is used. */
