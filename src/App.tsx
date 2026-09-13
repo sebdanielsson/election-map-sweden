@@ -93,7 +93,31 @@ class DataNotReadyError extends Error {
  * to be distinguishable from a 500 or a dropped connection. Returning null for it lets the
  * caller try the next counting instead of failing the page. */
 const fetchJsonOrNull = async (url: string, signal?: AbortSignal): Promise<unknown> => {
-  const response = await fetch(url, { signal });
+  let response: Response;
+  try {
+    response = await fetch(url, { signal });
+  } catch (error) {
+    /* A cross-origin 404 from the bucket carries no Access-Control-Allow-Origin header, so the
+     * browser blocks the response outright and fetch() rejects with a TypeError instead of
+     * resolving with status 404. Nothing about a blocked response is readable from script —
+     * that is the point of the block — so "the file is not there" and "the network failed" are
+     * genuinely indistinguishable here, and the status check below never even runs.
+     *
+     * This took the site down on election night. The app tries `slutlig` before `preliminar`,
+     * and `slutlig` is *expected* to 404 until the final count days later, so the very first
+     * request of every page load threw and the whole load failed with "check your connection"
+     * while the preliminary results sat in the bucket, reachable. Verified directly: the
+     * bucket returns access-control-allow-origin on a 200 and omits it on a 404, which is why
+     * checking CORS against files that exist said everything was fine.
+     *
+     * So a rejection is reported as absent, like a 404, and the caller decides what that
+     * means. The cost is that a real outage now reads as "not published yet" rather than as an
+     * error — which is the better of the two anyway, because that state retries on its own
+     * and the error state only tells the reader to reload. */
+    if (signal?.aborted) throw error;
+    console.warn(`${url} could not be read (${String(error)}) — treating it as not published`);
+    return null;
+  }
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${url} returned HTTP ${String(response.status)}`);
   return response.json();
