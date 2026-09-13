@@ -116,6 +116,8 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+const transformed: { path: string; data: string; file: string }[] = [];
+
 // Process each JSON file
 files.forEach((file) => {
   const inputFilePath = path.join(inputDir, file);
@@ -150,8 +152,13 @@ files.forEach((file) => {
     process.exit(1);
   }
 
-  // Save the transformed GeoJSON to the output file
-  fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data));
-
-  console.log(`Coordinate transformation complete for ${file}. Saved to ${outputFilePath}.`);
+  /* Held back rather than written here: a bad code in county 15 used to exit with counties
+   * 1-14 already on disk, and a caller that uploads or serves that directory would publish
+   * a partial map despite the refusal message. Nothing is written until all 21 pass. */
+  transformed.push({ path: outputFilePath, data: JSON.stringify(geojson_data), file });
 });
+
+for (const { path: outputFilePath, data, file } of transformed) {
+  fs.writeFileSync(outputFilePath, data);
+  console.log(`Coordinate transformation complete for ${file}. Saved to ${outputFilePath}.`);
+}

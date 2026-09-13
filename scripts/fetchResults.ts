@@ -96,20 +96,32 @@ const main = async () => {
 
   const cert = await get(CERT_URL);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "valresultat-"));
+  const stagingDir = path.join(workDir, "staging");
+  fs.mkdirSync(stagingDir, { recursive: true });
   const certPath = path.join(workDir, "val-sign-crt.pem");
   fs.writeFileSync(certPath, cert);
   /* Not a root of trust — the certificate comes from the same host as the data, so this
    * proves integrity and provenance-as-served, not that Valmyndigheten signed it. It still
-   * catches an *expired* certificate, which openssl does not check during `dgst -verify`.
-   * Note -checkend does not test notBefore, so a not-yet-valid certificate passes here and
-   * would only be caught by its signature failing. Pinning the SPKI hash would be the
-   * stronger control. */
+   * catches a certificate outside its validity window, which openssl does not check during
+   * `dgst -verify`. Pinning the SPKI hash would be the stronger control. */
   try {
     execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-checkend", "0"], {
       stdio: "pipe",
     });
   } catch {
-    die("Valmyndigheten's signing certificate is expired or not yet valid");
+    die("Valmyndigheten's signing certificate has expired");
+  }
+  /* -checkend only tests notAfter, so notBefore is checked separately: a certificate that
+   * is not valid yet would otherwise verify signatures happily. */
+  const notBefore = execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-startdate"])
+    .toString()
+    .replace("notBefore=", "")
+    .trim();
+  if (Number.isNaN(Date.parse(notBefore))) {
+    die(`could not read the certificate's notBefore date ("${notBefore}")`);
+  }
+  if (Date.parse(notBefore) > Date.now()) {
+    die(`Valmyndigheten's signing certificate is not valid until ${notBefore}`);
   }
   const publicKey = execFileSync("openssl", ["x509", "-pubkey", "-noout", "-in", certPath]);
   const publicKeyPath = path.join(workDir, "pub.pem");
@@ -162,11 +174,17 @@ const main = async () => {
         );
       }
 
-      fs.copyFileSync(jsonPath, path.join(outputDir, name));
+      /* Staged, not written straight to outputDir: a failure on a later archive used to
+       * leave earlier files behind, so a direct caller could mistake a partial set for a
+       * verified one. Everything moves across together once the whole loop succeeds. */
+      fs.copyFileSync(jsonPath, path.join(stagingDir, name));
       console.log(`  verified ${name}`);
     }
   }
 
+  for (const name of fs.readdirSync(stagingDir)) {
+    fs.copyFileSync(path.join(stagingDir, name), path.join(outputDir, name));
+  }
   fs.rmSync(workDir, { recursive: true, force: true });
   console.log(`\nVerified files written to ${outputDir}`);
 };

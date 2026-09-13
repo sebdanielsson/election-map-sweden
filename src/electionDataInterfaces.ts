@@ -45,8 +45,10 @@ export interface Valdistrikt {
 
 export interface ValdistriktRostfordelning {
   rosterPaverkaMandat: RosterPaverkaMandat;
-  rosterOvrigaPartier: RosterOvrigaPartier;
   rosterEjPaverkaMandat: RosterEjPaverkaMandat;
+  /* rosterOvrigaPartier is NOT here. It is nested inside rosterPaverkaMandat, both in the
+   * real files and in Valmyndigheten's spec. It was declared here as well, which made
+   * correct code reading the nested location look like a bug. */
 }
 
 export interface Personrost {

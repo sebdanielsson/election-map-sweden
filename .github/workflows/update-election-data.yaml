@@ -66,12 +66,14 @@ jobs:
             echo "active=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          case "$ACTIVE_UNTIL" in
-            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-            # A typo here would otherwise compare as a plain string and silently leave the
-            # schedule running forever, which is the runaway this guard exists to stop.
-            *) echo "::error::VAL_ACTIVE_UNTIL must be YYYY-MM-DD, got '$ACTIVE_UNTIL'"; exit 1 ;;
-          esac
+          # Round-tripped through date(1), not just shape-matched: 2026-99-99 has the right
+          # shape and sorts as a far-future date, so a typo would silently leave the
+          # five-minute schedule running forever — the runaway this guard exists to stop.
+          parsed=$(date -u -d "$ACTIVE_UNTIL" +%Y-%m-%d 2>/dev/null || true)
+          if [ "$parsed" != "$ACTIVE_UNTIL" ]; then
+            echo "::error::VAL_ACTIVE_UNTIL must be a real YYYY-MM-DD date, got '$ACTIVE_UNTIL'"
+            exit 1
+          fi
           if [ "$(date -u +%Y-%m-%d)" \> "$ACTIVE_UNTIL" ]; then
             echo "Past $ACTIVE_UNTIL — scheduled runs are done. Use workflow_dispatch to force one."
             echo "active=false" >> "$GITHUB_OUTPUT"

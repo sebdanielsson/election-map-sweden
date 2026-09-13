@@ -128,7 +128,13 @@ const trimmed = {
     if (district.valdistriktstyp === "uppsamlingsdistrikt") collectionDistricts += 1;
 
     return {
-      valdistriktskod: district.valdistriktskod,
+      /* Strings only. A numeric code passes a truthiness check but can never match the
+       * geometry's string key, and it cannot be stringified safely either — 42% of real
+       * codes begin with a zero. Left undefined here, the guard below rejects the file. */
+      valdistriktskod:
+        typeof district.valdistriktskod === "string" && district.valdistriktskod !== ""
+          ? district.valdistriktskod
+          : undefined,
       rostfordelning: {
         rosterPaverkaMandat: {
           partiRoster: parties.map((party) => ({

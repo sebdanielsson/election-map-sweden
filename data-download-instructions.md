@@ -31,7 +31,25 @@ The data is now downloaded and verified. You can now use the data in your projec
 
 ## District maps
 
+Both scripts take the election id (see `scripts/elections.ts` for the known ids) and a
+directory. Districts are redrawn between elections, so each election has its own geometry.
+
 ```shell
-npm run download-districts
-npm run transform-geojson
+# Download the raw archives (EPSG:3006) for one election
+pnpm run download-districts riksdag-2026 temp/districts/riksdag-2026
+
+# Reproject to WGS84, normalise the properties and drop the fields nothing reads
+pnpm run transform-geojson temp/districts/riksdag-2026 public/data/districts/riksdag-2026
 ```
+
+## Trimming result files
+
+Valmyndigheten's rostfordelning files carry every field they publish; the map reads four of
+them, and the difference is 146 MB against 7. Trim before uploading:
+
+```shell
+pnpm run trim-results <input.json> <output.json>
+```
+
+The script refuses any file carrying a `test` field, and any file with a district missing
+its `valdistriktskod`.

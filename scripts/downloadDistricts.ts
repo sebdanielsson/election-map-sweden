@@ -31,9 +31,6 @@ const geoJsonFilesIn = (dir: string) =>
 
 const downloadAndExtract = async (url: string) => {
   const zipFile = path.join(outputDir, path.basename(url));
-  /* Snapshot first: outputDir accumulates across archives, so counting everything in it
-   * afterwards reports a running total rather than what this archive contributed. */
-  const before = new Set(geoJsonFilesIn(outputDir));
 
   const response = await axios({
     url,
@@ -76,9 +73,15 @@ const downloadAndExtract = async (url: string) => {
     .pipe(unzipper.Extract({ path: outputDir }))
     .promise();
 
-  fs.unlinkSync(zipFile);
+  /* Ask the archive what it contains rather than diffing the directory. A directory diff
+   * counts only files that were not already there, so a re-run — which legitimately
+   * overwrites the same names — looked like an archive that extracted nothing. */
+  const directory = await unzipper.Open.file(zipFile);
+  const extracted = directory.files
+    .map((entry) => entry.path)
+    .filter((name) => name.endsWith(".json") || name.endsWith(".geojson"));
 
-  const extracted = geoJsonFilesIn(outputDir).filter((f) => !before.has(f));
+  fs.unlinkSync(zipFile);
 
   console.log(`Downloaded and extracted ${extracted.length} GeoJSON files from ${url}`);
   /* Throw rather than log. An archive that extracts nothing — a layout change, entries
@@ -87,7 +90,10 @@ const downloadAndExtract = async (url: string) => {
    * when *no* files exist at all, so nothing downstream would have noticed either. */
   if (extracted.length === 0) {
     throw new Error(
-      `extracted no GeoJSON; archive contains: ${fs.readdirSync(outputDir).slice(0, 10).join(", ")}`,
+      `archive contains no GeoJSON; entries: ${directory.files
+        .map((e) => e.path)
+        .slice(0, 10)
+        .join(", ")}`,
     );
   }
 };
