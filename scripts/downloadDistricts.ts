@@ -4,7 +4,7 @@ import axios from "axios";
 import * as unzipper from "unzipper";
 import { pipeline } from "node:stream/promises";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
-import { commitDir, stagingPathFor } from "./publishDir.ts";
+import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
 import { electionIds, getElection } from "./elections.ts";
 
 // Usage: downloadDistricts.ts <election-id> <output-dir>
@@ -27,6 +27,13 @@ const districtsUrls = election.districtUrls;
  * changed at some point — the old file stays, transformGeojson reads it alongside the new
  * ones, and the count check passes because there are now *more* files than expected. A
  * mixed-vintage map, every check green. */
+/* Before staging, and before any failure path can return: on success commitDir would repair
+ * an interrupted earlier swap itself, but a run that fails partway never reaches it, and the
+ * catch below only has "leave outputDir alone" to offer — which restores nothing when the
+ * interruption is why outputDir is missing. Without this a failed retry left the last good
+ * set stranded under `.previous` and the target absent. */
+recoverInterrupted(outputDir);
+
 const stagingDir = stagingPathFor(outputDir);
 
 fs.rmSync(stagingDir, { recursive: true, force: true });

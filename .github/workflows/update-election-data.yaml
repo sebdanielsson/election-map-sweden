@@ -126,7 +126,12 @@ jobs:
           # independent of that: find on a missing directory exits 1 and pipefail would
           # kill the step before count= was ever written.
           mkdir -p verified
-          count=$(find verified -maxdepth 1 -name '*.json' | wc -l)
+          # The `tr` is belt-and-braces, not a fix: GNU wc does not pad when it reads a pipe
+          # (checked on coreutils 9.4, which is what ubuntu-24.04 ships — `count=0`, length 1),
+          # so the padding review flagged does not occur on this runner. BSD and busybox wc do
+          # pad, though, and every condition below compares against the exact string "0", so
+          # one pipe buys immunity to ever moving this job off a GNU runner.
+          count=$(find verified -maxdepth 1 -name '*.json' | wc -l | tr -d '[:space:]')
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "Verified files: $count"
 

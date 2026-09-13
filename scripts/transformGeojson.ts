@@ -125,6 +125,15 @@ if (files.length === 0) {
 
 const transformed: { path: string; data: string; file: string }[] = [];
 
+/* Codes are the join key: the app resolves a district's results with
+ * `valdistrikt.find((d) => d.valdistriktskod === districtId)`, so two polygons sharing a code
+ * render as two districts showing one district's result, with nothing anywhere reporting a
+ * problem. trimResults already refuses duplicates on the results side; this is the same
+ * guarantee on the geometry side, and it has to span files because a code repeated across two
+ * counties is exactly as broken as one repeated within a county. */
+const codeOwner = new Map<string, string>();
+const duplicateCodes: { code: string; first: string; second: string }[] = [];
+
 // Process each JSON file
 files.forEach((file) => {
   const inputFilePath = path.join(inputDir, file);
@@ -167,11 +176,33 @@ files.forEach((file) => {
     process.exit(1);
   }
 
+  for (const feature of geojson_data.features) {
+    const code = (feature.properties as NormalisedDistrict | null)?.Lkfv;
+    /* Already proven non-empty by the check above; this keeps the type honest. */
+    if (!code) continue;
+    const first = codeOwner.get(code);
+    if (first === undefined) codeOwner.set(code, file);
+    else duplicateCodes.push({ code, first, second: file });
+  }
+
   /* Held back rather than written here: a bad code in county 15 used to exit with counties
    * 1-14 already on disk, and a caller that uploads or serves that directory would publish
    * a partial map despite the refusal message. Nothing is written until all 21 pass. */
   transformed.push({ path: outputFilePath, data: JSON.stringify(geojson_data), file });
 });
+
+if (duplicateCodes.length > 0) {
+  const shown = duplicateCodes
+    .slice(0, 5)
+    .map(({ code, first, second }) => `${code} (${first} and ${second})`)
+    .join(", ");
+  console.error(
+    `${String(duplicateCodes.length)} duplicate district code(s) across the input: ${shown} — ` +
+      `refusing to write, the app resolves districts by code and would show one district's ` +
+      `results for both`,
+  );
+  process.exit(1);
+}
 
 /* Built beside the target and swapped in, rather than written into it. Holding the writes
  * back until every input passed stopped a *partial* set being written, but it did nothing
