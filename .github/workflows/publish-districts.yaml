@@ -26,7 +26,9 @@ on:
         required: true
         default: riksdag-2026
       destination:
-        description: "Directory under data/districts/ (blank = the election id)"
+        description: >-
+          Directory under data/districts/ (blank = whatever src/elections.ts says the app reads
+          for this election, which is not always the election id — eu-2024 lives under EPSG4326)
         required: false
 
 concurrency:
@@ -124,6 +126,7 @@ jobs:
           du -sh "publish/districts/$ELECTION"
 
       - name: Upload to Backblaze
+        id: upload
         env:
           # Via env, never interpolated into the script text: a secret containing a quote or
           # $(...) would otherwise be executed by the shell.
@@ -178,6 +181,11 @@ jobs:
             "" | */* | .*) echo "::error::destination must be a single plain directory name"; exit 1 ;;
           esac
           echo "Publishing to data/districts/$dest/"
+          # Recorded for the summary. It used to print `${DESTINATION:-$ELECTION}`, which is
+          # the election id whenever the input was left blank — so a run that correctly
+          # published eu-2024 to `EPSG4326` reported having published it to `eu-2024`, naming
+          # a path that does not exist and hiding the one that does.
+          echo "dest=$dest" >> "$GITHUB_OUTPUT"
 
           aws s3 cp "publish/districts/$ELECTION" "s3://$BUCKET/data/districts/$dest" \
             --recursive \
@@ -190,14 +198,16 @@ jobs:
         if: always()
         env:
           ELECTION: ${{ inputs.election }}
-          DESTINATION: ${{ inputs.destination }}
+          # The path the upload step actually resolved, not a second guess at it. Empty when
+          # the run failed before that step, which the branch below is the case for.
+          DEST: ${{ steps.upload.outputs.dest }}
           STATUS: ${{ job.status }}
         run: |
           {
             echo "### District geometry"
             echo ""
             if [ "$STATUS" = "success" ]; then
-              echo "Published \`$ELECTION\` to \`data/districts/${DESTINATION:-$ELECTION}/\`."
+              echo "Published \`$ELECTION\` to \`data/districts/$DEST/\`."
             else
               echo "**Run failed — nothing was published.** See the failing step above."
             fi

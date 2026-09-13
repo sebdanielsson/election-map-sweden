@@ -50,6 +50,8 @@ interface RostfordelningIn {
   valdistrikt?: ValdistriktIn[];
 }
 
+import { provenanceProblems as sharedProvenanceProblems } from "./provenance.ts";
+
 const [, , inputFile, outputFile] = process.argv;
 
 if (!inputFile || !outputFile) {
@@ -152,21 +154,23 @@ if (!districts || districts.length === 0) {
  * An explicit null passes: the app's type allows it and it survives serialisation. Only an
  * absent key or a wrong type is refused. Verified present and correctly typed in every real
  * rostfordelning checked — 2022 riksdag and 2024 EU — so this does not reject good input. */
+/* The fields both halves share are checked by scripts/provenance.ts, which mandatfordelning
+ * goes through too — one contract, so the two sides cannot drift apart and publish a file the
+ * app then refuses. Only the district counters are left here: they exist on rostfordelning
+ * alone. */
 const requiredProvenance: [keyof RostfordelningIn, "string" | "number"][] = [
-  ["valtillfalle", "string"],
-  ["valtyp", "string"],
-  ["rakningstillfalle", "string"],
-  ["senasteUppdateringstid", "string"],
   ["antalValdistriktRaknade", "number"],
   ["antalValdistriktSomSkaRaknas", "number"],
 ];
-const provenanceProblems = requiredProvenance.flatMap(([key, kind]) => {
-  if (!Object.hasOwn(source, key)) return [`${key} is absent`];
-  const value = source[key];
-  if (value === null) return [];
-  if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
-  return [];
-});
+const provenanceProblems = sharedProvenanceProblems(source).concat(
+  requiredProvenance.flatMap(([key, kind]) => {
+    if (!Object.hasOwn(source, key)) return [`${key} is absent`];
+    const value = source[key];
+    if (value === null) return [];
+    if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
+    return [];
+  }),
+);
 /* Optional rather than required — no published file has ever carried it — but a present
  * valdatum is copied into the output and typed `string | null` there, so a numeric or object
  * one would be published as an invalid provenance field while every other field on this path
