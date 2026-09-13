@@ -231,11 +231,22 @@ const main = async () => {
         );
       }
 
-      /* Staged, not written straight to outputDir: a failure on a later archive used to
-       * leave earlier files behind, so a direct caller could mistake a partial set for a
-       * verified one. Everything moves across together once the whole loop succeeds. */
-      fs.copyFileSync(jsonPath, path.join(stagingDir, name));
-      console.log(`  verified ${name}`);
+      /* The extension is normalised to lowercase on the way out. The filter above accepts
+       * `.JSON`, so such a file used to land in verified/ under its original name and then
+       * vanish from every consumer: the workflow's eight `*.json` globs are case-sensitive,
+       * so it counted zero, skipped trim and upload, and reported "nothing published yet" on
+       * a run that had in fact verified real results. Normalising at this one point fixes all
+       * eight at once — making each glob case-insensitive instead would mean getting all
+       * eight right and keeping them that way. The bytes are untouched and the signature was
+       * checked before this; only the name changes. */
+      const staged = name.replace(/\.json$/i, ".json");
+      const stagedPath = path.join(stagingDir, staged);
+      /* An archive shipping both `X.json` and `X.JSON` would otherwise silently lose one. */
+      if (fs.existsSync(stagedPath)) {
+        die(`${href}: ${name} and another entry both normalise to ${staged} — refusing to guess`);
+      }
+      fs.copyFileSync(jsonPath, stagedPath);
+      console.log(`  verified ${name}${staged === name ? "" : ` -> ${staged}`}`);
     }
   }
 
