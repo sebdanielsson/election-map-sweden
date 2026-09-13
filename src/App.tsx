@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
+import type { ErrorEvent as MapboxErrorEvent, GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import type { Feature, FeatureCollection } from "geojson";
 import type {
   Rostfordelning,
@@ -126,7 +126,6 @@ export default function App() {
      * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
     let createdMap: MapboxMap | null = null;
-    let loaded = false;
 
     /* mapbox-gl is ~1.8 MB of JS and ~49 kB of CSS — far more than the rest of the app put
      * together. Loading it here rather than importing it at the top of this file keeps it out
@@ -144,23 +143,30 @@ export default function App() {
       });
       createdMap = newMap;
 
-      newMap.on("load", () => {
-        loaded = true;
-        if (cancelled) return;
-        /* Clears an error reported below that turned out not to be fatal — a sprite or glyph
-         * that 404s still fires `error`, but the style itself can load fine afterwards. */
-        setLoadError(null);
-        setMap(newMap);
-      });
-
       /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
        * long-lived error handler — has not run yet. Without this, a style that never arrives
-       * (expired or invalid token, 401, offline) spins forever and logs nothing. */
-      newMap.on("error", (e) => {
-        if (cancelled || loaded) return;
+       * (expired or invalid token, 401, offline) spins forever and logs nothing. Note there is
+       * no setLoading(false) here: the spinner is already hidden whenever loadError is set, and
+       * leaving `loading` alone is what lets it come back if the style turns out to be fine. */
+      const onPreLoadError = (e: MapboxErrorEvent) => {
+        if (cancelled) return;
         console.error("Failed to load the map style:", e.error ?? e);
         setLoadError("Could not load the map. Check your connection and reload the page.");
-        setLoading(false);
+      };
+      newMap.on("error", onPreLoadError);
+
+      newMap.on("load", () => {
+        if (cancelled) return;
+        /* Hand error reporting back before anything else: Mapbox only logs an unhandled error
+         * itself while no listener is registered, so keeping this one would silently swallow
+         * every map error until the data effect attaches its own — and all of them if that
+         * effect throws first. */
+        newMap.off("error", onPreLoadError);
+        /* A sprite or glyph that 404s fires `error` while the style still loads fine, so drop
+         * the overlay that reported it. `loading` is untouched, so the spinner resumes until
+         * the district data lands. */
+        setLoadError(null);
+        setMap(newMap);
       });
     };
 
