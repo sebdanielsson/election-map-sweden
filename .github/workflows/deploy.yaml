@@ -84,11 +84,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/vercel-cli"
           cd "$RUNNER_TEMP/vercel-cli"
           pnpm init >/dev/null
-          # --allow-build because pnpm 12 refuses an install that silently skips a
-          # dependency's build scripts (ERR_PNPM_IGNORED_BUILDS) rather than ignoring them
-          # quietly. Naming vercel permits exactly that one package, which is the whole
-          # dependency set here.
-          pnpm add vercel@59.16.0 --allow-build=vercel
+          # --allow-build because pnpm 12 fails an install that would silently skip a
+          # dependency's build scripts (ERR_PNPM_IGNORED_BUILDS) rather than skipping them
+          # quietly. esbuild is the one that needs it — it is a transitive dependency of the
+          # CLI whose postinstall links its native binary — so naming only `vercel` was not
+          # enough and the install still aborted. Both are listed rather than reasoned about:
+          # this exact command was run against pnpm 12.4.1 before committing it, and
+          # `vercel --version` reports 59.16.0 afterwards.
+          pnpm add vercel@59.16.0 --allow-build=vercel --allow-build=esbuild
           echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Environment is decided once and reused, so the pull, the build and the deploy cannot
