@@ -82,11 +82,32 @@ const numberOrNull = (value: unknown, where: string): number | null => {
  * and wrong for one that is: `rosterOvrigaPartier: {}` would publish as a null share, and
  * App.tsx turns a null other-party share into 0 — quietly understating Others rather than
  * failing. So presence is checked where the container exists. */
-const requiredNumberMember = (container: object, key: string, where: string): number | null => {
+const requiredNumberMember = (
+  container: object,
+  key: string,
+  where: string,
+  range?: { min: number; max?: number },
+): number | null => {
   if (!Object.hasOwn(container, key)) {
     fail(`${where} is absent from a bucket that is present — refusing to publish it as null`);
   }
-  return numberOrNull((container as Record<string, unknown>)[key], where);
+  const value = numberOrNull((container as Record<string, unknown>)[key], where);
+  /* Finite is not the same as plausible. andelRoster is a percentage and antalRoster a count,
+   * so -1 and 101 are as wrong as "4" was: App.tsx would fold a negative share into Others
+   * and render a >100 one as a major party, both silently. The threshold got this treatment
+   * two rounds ago; the shares it is compared against did not. Real values run 0–67.9 for a
+   * party share, 0–28.2 for the other-party bucket and 0–242 for its count, so nothing real
+   * is near these bounds. */
+  if (value !== null && range) {
+    if (value < range.min || (range.max !== undefined && value > range.max)) {
+      const bound =
+        range.max === undefined
+          ? `at least ${String(range.min)}`
+          : `${String(range.min)}–${String(range.max)}`;
+      fail(`${where} is ${String(value)}, expected ${bound}`);
+    }
+  }
+  return value;
 };
 
 /* The labels get the same treatment as the numbers, for the same reason: they are only cast,
@@ -145,6 +166,16 @@ const provenanceProblems = requiredProvenance.flatMap(([key, kind]) => {
   if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
   return [];
 });
+/* Optional rather than required — no published file has ever carried it — but a present
+ * valdatum is copied into the output and typed `string | null` there, so a numeric or object
+ * one would be published as an invalid provenance field while every other field on this path
+ * fails closed. Absent stays legal; present-and-wrong does not. */
+if (Object.hasOwn(source, "valdatum") && source.valdatum !== null) {
+  if (typeof source.valdatum !== "string") {
+    provenanceProblems.push(`valdatum is ${typeof source.valdatum}, expected string or null`);
+  }
+}
+
 if (provenanceProblems.length > 0) {
   fail(
     `provenance unusable: ${provenanceProblems.join("; ")} — refusing to publish a snapshot ` +
@@ -266,6 +297,7 @@ const trimmed = {
               party,
               "andelRoster",
               `district ${district.valdistriktskod ?? "(no code)"} party ${party.partikod ?? "(no code)"} andelRoster`,
+              { min: 0, max: 100 },
             ),
           })),
           /* Votes for parties below the reporting threshold are their own bucket, not part
@@ -283,6 +315,7 @@ const trimmed = {
                     ovriga,
                     "antalRoster",
                     `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.antalRoster`,
+                    { min: 0 },
                   ),
             andelRoster:
               ovriga == null
@@ -291,6 +324,7 @@ const trimmed = {
                     ovriga,
                     "andelRoster",
                     `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.andelRoster`,
+                    { min: 0, max: 100 },
                   ),
           },
         },

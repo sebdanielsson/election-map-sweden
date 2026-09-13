@@ -1,7 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import proj4 from "proj4";
-import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
+import {
+  cleanStagingOrphans,
+  commitDir,
+  recoverInterrupted,
+  stagingPathFor,
+} from "./publishDir.ts";
 import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
 /* Five decimal places is about 1 m at this latitude — well under the width of the thinnest
@@ -118,6 +123,9 @@ if (!fs.existsSync(inputDir)) {
 /* Repairs an earlier run that was killed mid-swap. It has to happen before anything else
  * touches the target, because the repair keys off the target being absent. */
 recoverInterrupted(outputDir);
+for (const orphan of cleanStagingOrphans(outputDir)) {
+  console.warn(`removed staging left by a dead process: ${orphan}`);
+}
 
 /* The target is deliberately NOT created here. Nothing below writes to it — every file goes
  * to the staging directory and commitDir installs the validated set, creating the parent

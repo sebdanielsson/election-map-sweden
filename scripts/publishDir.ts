@@ -16,6 +16,42 @@ import * as path from "node:path";
 export const stagingPathFor = (targetDir: string): string =>
   `${path.resolve(targetDir)}.staging-${String(process.pid)}`;
 
+/**
+ * Removes `<target>.staging-<pid>` directories belonging to processes that no longer exist.
+ *
+ * Staging is pid-scoped, so a run killed after staging was populated left a full copy of the
+ * dataset behind that nothing ever read or removed — the same shape as the 439 MB of /tmp
+ * that fetchResults was leaking before its cleanup was fixed, and it lands in the workspace
+ * rather than in /tmp.
+ *
+ * Liveness is checked with `kill(pid, 0)` rather than a timestamp, so a staging directory
+ * belonging to a process that is still running is never touched. That matters because the
+ * caller is about to build its own staging next to these.
+ */
+export const cleanStagingOrphans = (targetDir: string): string[] => {
+  const target = path.resolve(targetDir);
+  const parent = path.dirname(target);
+  const prefix = `${path.basename(target)}.staging-`;
+  if (!fs.existsSync(parent)) return [];
+  const removed: string[] = [];
+  for (const entry of fs.readdirSync(parent)) {
+    if (!entry.startsWith(prefix)) continue;
+    const pid = Number(entry.slice(prefix.length));
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    try {
+      /* Signal 0 performs the permission and existence checks without delivering anything. */
+      process.kill(pid, 0);
+      continue; /* still alive — leave it be */
+    } catch (error) {
+      /* EPERM means the process exists but belongs to someone else; only ESRCH means gone. */
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") continue;
+    }
+    fs.rmSync(path.join(parent, entry), { recursive: true, force: true });
+    removed.push(entry);
+  }
+  return removed;
+};
+
 /* Deliberately not pid-suffixed, unlike the staging path. Recovery depends on a *later*
  * run being able to recognise this directory, and a dead process's pid tells it nothing. */
 const previousPathFor = (target: string): string => `${target}.previous`;

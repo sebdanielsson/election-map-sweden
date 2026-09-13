@@ -22,7 +22,12 @@
 import { execFileSync } from "node:child_process";
 import * as unzipper from "unzipper";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
-import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
+import {
+  cleanStagingOrphans,
+  commitDir,
+  recoverInterrupted,
+  stagingPathFor,
+} from "./publishDir.ts";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -78,6 +83,9 @@ const main = async () => {
    * this line an interrupted run's data was stranded on the empty-index path and destroyed
    * on the publish path, which is precisely the failure the staging was added to prevent. */
   recoverInterrupted(outputDir);
+  for (const orphan of cleanStagingOrphans(outputDir)) {
+    console.warn(`removed staging left by a dead process: ${orphan}`);
+  }
   fs.mkdirSync(outputDir, { recursive: true });
 
   const indexBody = (await get(INDEX_URL)).toString("utf8");

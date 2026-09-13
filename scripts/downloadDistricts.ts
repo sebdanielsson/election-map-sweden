@@ -4,7 +4,12 @@ import axios from "axios";
 import * as unzipper from "unzipper";
 import { pipeline } from "node:stream/promises";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
-import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
+import {
+  cleanStagingOrphans,
+  commitDir,
+  recoverInterrupted,
+  stagingPathFor,
+} from "./publishDir.ts";
 import { electionIds, getElection } from "./elections.ts";
 
 // Usage: downloadDistricts.ts <election-id> <output-dir>
@@ -33,6 +38,9 @@ const districtsUrls = election.districtUrls;
  * interruption is why outputDir is missing. Without this a failed retry left the last good
  * set stranded under `.previous` and the target absent. */
 recoverInterrupted(outputDir);
+for (const orphan of cleanStagingOrphans(outputDir)) {
+  console.warn(`removed staging left by a dead process: ${orphan}`);
+}
 
 const stagingDir = stagingPathFor(outputDir);
 
@@ -72,9 +80,19 @@ const downloadAndExtract = async (url: string) => {
    * names. Scanning it whole matches a header whose *value* happens to be the string —
    * `Vary: Content-Encoding`, which CDNs send constantly — and that silently turns the
    * size check off for that county. */
-  const wasEncoded = rawHeaders.some(
+  /* Only the encodings axios actually decodes count. Treating *any* Content-Encoding as
+   * proof of decoding turned off the one truncation check for `identity` — which means "not
+   * compressed", so Content-Length still describes exactly the bytes we wrote — and for any
+   * future encoding axios passes through untouched. Read out of axios 1.20's http adapter
+   * rather than assumed: it decompresses gzip, x-gzip, compress, x-compress, deflate and br,
+   * and leaves everything else alone. */
+  const DECODED_BY_AXIOS = new Set(["gzip", "x-gzip", "compress", "x-compress", "deflate", "br"]);
+  const encodingHeaderIndex = rawHeaders.findIndex(
     (header, index) => index % 2 === 0 && header.toLowerCase() === "content-encoding",
   );
+  const wasEncoded =
+    encodingHeaderIndex !== -1 &&
+    DECODED_BY_AXIOS.has((rawHeaders[encodingHeaderIndex + 1] ?? "").trim().toLowerCase());
   const expected = Number(response.headers["content-length"]);
   const written = fs.statSync(zipFile).size;
   if (!wasEncoded && Number.isFinite(expected) && expected > 0 && written !== expected) {
