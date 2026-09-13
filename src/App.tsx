@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import type { Feature, FeatureCollection } from "geojson";
 import type {
   Rostfordelning,
@@ -106,32 +106,56 @@ export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
-  const [map, setMap] = useState<mapboxgl.Map | null>(null);
+  const [map, setMap] = useState<MapboxMap | null>(null);
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-    const newMap = new mapboxgl.Map({
-      container: "map",
-      style: "mapbox://styles/mapbox/standard",
-      center: [16.325556, 62.3875],
-      zoom: 5,
-    });
-
     /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
      * unmount before Mapbox fires `load`. Without this, cleanup removes the map and the
      * handler then puts that disposed instance into state, which the effect below would
-     * happily wire handlers onto. */
+     * happily wire handlers onto. The dynamic import adds a second await to that window, so
+     * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
-    newMap.on("load", () => {
-      if (!cancelled) setMap(newMap);
+    let created: MapboxMap | null = null;
+
+    /* mapbox-gl is ~1.8 MB of JS and ~49 kB of CSS — far more than the rest of the app put
+     * together. Importing it here instead of at module scope keeps it out of the entry
+     * chunk, so the shell (header, spinner, sidebar) paints while the library downloads. */
+    const initMap = async () => {
+      const [{ default: mapboxgl }] = await Promise.all([
+        import("mapbox-gl"),
+        import("mapbox-gl/dist/mapbox-gl.css"),
+      ]);
+      if (cancelled) return;
+
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+      const newMap = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/standard",
+        center: [16.325556, 62.3875],
+        zoom: 5,
+      });
+      created = newMap;
+
+      newMap.on("load", () => {
+        if (!cancelled) setMap(newMap);
+      });
+    };
+
+    /* A failed chunk fetch would otherwise leave the spinner up forever and surface only as
+     * an unhandledrejection, the same way the data fetches below would. */
+    initMap().catch((err: unknown) => {
+      if (cancelled) return;
+      console.error("Failed to load the map library:", err);
+      setLoadError("Could not load the map. Check your connection and reload the page.");
+      setLoading(false);
     });
 
     return () => {
       cancelled = true;
-      newMap.remove();
+      created?.remove();
     };
   }, []);
 
@@ -236,7 +260,7 @@ export default function App() {
                 console.error("No properties found for the selected district");
               }
 
-              const highlightSource = map.getSource("highlight-feature") as mapboxgl.GeoJSONSource;
+              const highlightSource = map.getSource("highlight-feature") as GeoJSONSource;
               highlightSource.setData({
                 type: "FeatureCollection",
                 features: [feature as unknown as Feature],
@@ -250,6 +274,12 @@ export default function App() {
           }
         });
 
+        /* Already resolved: this effect only runs once the map exists, which means the
+         * chunk imported above is in the module registry. Go through the default export:
+         * mapbox-gl's dist is CJS, so the named `Popup` its .d.ts advertises does not exist
+         * at run time — destructuring it type checks and then throws, in dev and build
+         * alike. Same reason the map above is constructed off `default`. */
+        const { default: mapboxgl } = await import("mapbox-gl");
         const tooltip = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
