@@ -1,0 +1,131 @@
+---
+name: Update election data
+
+# On election night Valmyndigheten overwrites the result files repeatedly as districts
+# report. This polls for those updates, proves each file is authentic, trims it and
+# publishes it to the bucket the app reads.
+#
+# Every step fails closed. Nothing reaches the bucket unless its MD5 matches the published
+# index, its detached RSA signature verifies against Valmyndigheten's certificate, and it
+# is not flagged as test data. A failed run publishes nothing and leaves whatever is
+# already in the bucket in place, which is the safe outcome: stale real results beat fresh
+# unverified ones.
+#
+# Required repository secrets:
+#   B2_KEY_ID           Backblaze application key id
+#   B2_APPLICATION_KEY  Backblaze application key
+#   B2_BUCKET           bucket name, e.g. election-map-sweden
+#   B2_S3_ENDPOINT      S3-compatible endpoint, e.g. https://s3.us-west-001.backblazeb2.com
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # GitHub enforces a five-minute floor and delays scheduled runs under load, so treat
+    # this as "within about ten minutes of publication", not as real time.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      select:
+        description: "Regex selecting archives from index.md5 (default: riksdag)"
+        required: false
+        default: '_RD\.zip$'
+
+concurrency:
+  # Never let two runs upload at once; a later run would race a half-finished upload.
+  group: update-election-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: pnpm/setup@v2
+        with:
+          cache: true
+
+      - name: Fail early if the bucket credentials are missing
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_S3_ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+        run: |
+          missing=""
+          for name in B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_S3_ENDPOINT; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+
+      # Verifies MD5, RSA signature and the `test` flag. Exits non-zero and writes nothing
+      # if any of those fail. An index with no archives yet (before polls close) is not an
+      # error: it exits 0 having done nothing, and the steps below no-op.
+      - name: Fetch and verify result files
+        env:
+          VAL_SELECT: ${{ inputs.select || '_RD\.zip$' }}
+        run: |
+          node --experimental-strip-types scripts/fetchResults.ts verified
+
+      - name: Stop here if nothing was published yet
+        id: check
+        run: |
+          count=$(ls verified 2>/dev/null | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Verified files: $count"
+
+      - name: Trim the result files
+        if: steps.check.outputs.count != '0'
+        run: |
+          mkdir -p publish
+          shopt -s nullglob
+          for f in verified/*rostfordelning*.json; do
+            node --experimental-strip-types scripts/trimResults.ts "$f" "publish/$(basename "$f")"
+          done
+          # mandatfordelning is a couple of hundred kB and carries the seat allocation and
+          # the threshold the app reads, so it ships as published.
+          for f in verified/*mandatfordelning*.json; do cp "$f" "publish/$(basename "$f")"; done
+          ls -la publish
+
+      # Gzipped at rest with Content-Encoding set, because B2 does not compress on the fly:
+      # the app currently downloads these uncompressed.
+      - name: Compress
+        if: steps.check.outputs.count != '0'
+        run: |
+          for f in publish/*.json; do gzip -9 -c "$f" > "$f.gz" && mv "$f.gz" "$f"; done
+          ls -la publish
+
+      - name: Upload to Backblaze
+        if: steps.check.outputs.count != '0'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          AWS_DEFAULT_REGION: us-west-001
+        run: |
+          for f in publish/*.json; do
+            aws s3 cp "$f" \
+              "s3://${{ secrets.B2_BUCKET }}/data/election-results/$(basename "$f")" \
+              --endpoint-url "${{ secrets.B2_S3_ENDPOINT }}" \
+              --content-type application/json \
+              --content-encoding gzip \
+              --cache-control "public, max-age=60"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Election data update"
+            echo ""
+            echo "Verified files: ${{ steps.check.outputs.count || '0' }}"
+            if [ "${{ steps.check.outputs.count || '0' }}" = "0" ]; then
+              echo ""
+              echo "Nothing published by Valmyndigheten yet — no upload."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
