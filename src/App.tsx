@@ -95,6 +95,13 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   return response.json();
 };
 
+/* Both loaders live at module scope on purpose. oxc's React Compiler — enabled by
+ * `react({ compiler: true })` in vite.config.ts — cannot lower an `import()` expression and
+ * silently skips any component containing one, which cost App its memoisation entirely.
+ * Calling out to these keeps the chunk split without putting `import()` inside the component. */
+const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
+const loadMapboxJs = () => import("mapbox-gl");
+
 const closeSidebar = () => {
   const sidebar = document.getElementById("sidebar");
   if (sidebar && !sidebar.classList.contains("translate-x-full")) {
@@ -118,16 +125,14 @@ export default function App() {
      * happily wire handlers onto. The dynamic import adds a second await to that window, so
      * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
-    let created: MapboxMap | null = null;
+    let createdMap: MapboxMap | null = null;
+    let loaded = false;
 
     /* mapbox-gl is ~1.8 MB of JS and ~49 kB of CSS — far more than the rest of the app put
-     * together. Importing it here instead of at module scope keeps it out of the entry
-     * chunk, so the shell (header, spinner, sidebar) paints while the library downloads. */
+     * together. Loading it here rather than importing it at the top of this file keeps it out
+     * of the entry chunk, so the map frame, spinner and sidebar paint while it downloads. */
     const initMap = async () => {
-      const [{ default: mapboxgl }] = await Promise.all([
-        import("mapbox-gl"),
-        import("mapbox-gl/dist/mapbox-gl.css"),
-      ]);
+      const [{ default: mapboxgl }] = await loadMapbox();
       if (cancelled) return;
 
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -137,10 +142,25 @@ export default function App() {
         center: [16.325556, 62.3875],
         zoom: 5,
       });
-      created = newMap;
+      createdMap = newMap;
 
       newMap.on("load", () => {
-        if (!cancelled) setMap(newMap);
+        loaded = true;
+        if (cancelled) return;
+        /* Clears an error reported below that turned out not to be fatal — a sprite or glyph
+         * that 404s still fires `error`, but the style itself can load fine afterwards. */
+        setLoadError(null);
+        setMap(newMap);
+      });
+
+      /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
+       * long-lived error handler — has not run yet. Without this, a style that never arrives
+       * (expired or invalid token, 401, offline) spins forever and logs nothing. */
+      newMap.on("error", (e) => {
+        if (cancelled || loaded) return;
+        console.error("Failed to load the map style:", e.error ?? e);
+        setLoadError("Could not load the map. Check your connection and reload the page.");
+        setLoading(false);
       });
     };
 
@@ -155,12 +175,12 @@ export default function App() {
 
     return () => {
       cancelled = true;
-      created?.remove();
+      createdMap?.remove();
     };
   }, []);
 
   useEffect(() => {
-    /* The work below spans two awaits and then mutates the map and component state. The map
+    /* The work below spans three awaits and then mutates the map and component state. The map
      * init effect's cleanup calls remove() on unmount — and StrictMode runs that in dev on
      * every mount — so without this flag a teardown mid-fetch lands addSource/addLayer and
      * event handlers on a disposed instance. */
@@ -274,12 +294,10 @@ export default function App() {
           }
         });
 
-        /* Already resolved: this effect only runs once the map exists, which means the
-         * chunk imported above is in the module registry. Go through the default export:
-         * mapbox-gl's dist is CJS, so the named `Popup` its .d.ts advertises does not exist
-         * at run time — destructuring it type checks and then throws, in dev and build
-         * alike. Same reason the map above is constructed off `default`. */
-        const { default: mapboxgl } = await import("mapbox-gl");
+        /* Already resolved: this effect only runs once the map exists, so the chunk is in
+         * the module registry. Taken off `default` to match the constructor above —
+         * mapbox-gl ships a UMD bundle, whose named exports exist only via bundler interop. */
+        const { default: mapboxgl } = await loadMapboxJs();
         if (cancelled) return;
 
         const tooltip = new mapboxgl.Popup({
