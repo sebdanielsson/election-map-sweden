@@ -1,0 +1,282 @@
+---
+name: Update election data
+
+# On election night Valmyndigheten overwrites the result files repeatedly as districts
+# report. This polls for those updates, proves each file is authentic, trims it and
+# publishes it to the bucket the app reads.
+#
+# Every step fails closed. Nothing reaches the bucket unless its MD5 matches the published
+# index, its detached RSA signature verifies against a currently-valid Valmyndigheten
+# certificate, and it carries no `test` field at all. A failed run publishes nothing and
+# leaves whatever is already in the bucket in place: stale real results beat fresh
+# unverified ones.
+#
+# Required repository secrets:
+#   B2_KEY_ID           Backblaze application key id, scoped to the bucket
+#   B2_APPLICATION_KEY  the matching application key (shown once at creation)
+#   B2_BUCKET           bucket name, e.g. election-map-sweden
+#   B2_S3_ENDPOINT      S3-compatible endpoint from the bucket page, with scheme,
+#                       e.g. https://s3.us-west-001.backblazeb2.com
+#
+# Optional repository variables:
+#   VAL_ACTIVE_UNTIL    ISO date after which scheduled runs no-op (default 2026-09-27)
+#   VAL_SELECT          regex selecting archives from index.md5 (default: riksdag, both
+#                       the preliminary and the final counting)
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # GitHub enforces a five-minute floor and delays scheduled runs under load, so treat
+    # this as "within about ten minutes of publication", not as real time. The window
+    # guard below stops this from running every five minutes forever.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      select:
+        # Deliberately no default: a non-empty default here would always be truthy and
+        # would shadow the VAL_SELECT repository variable on every manual run.
+        description: "Regex selecting archives from index.md5 (blank = riksdag, both countings)"
+        required: false
+
+concurrency:
+  # Never let two runs upload at once; a later run would race a half-finished upload.
+  group: update-election-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04-arm
+    # fetchResults uses bare fetch() with no timeout, and the concurrency group does not
+    # cancel in progress — so a stalled connection would otherwise hold the group for the
+    # default six hours and silently drop every queued poll on election night.
+    timeout-minutes: 10
+    steps:
+      # A scheduled job has no natural end. Without this it would run ~105k times a year,
+      # each one a checkout, an install and a request to resultat.val.se.
+      - name: Skip scheduled runs outside the election window
+        id: window
+        env:
+          ACTIVE_UNTIL: ${{ vars.VAL_ACTIVE_UNTIL || '2026-09-27' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "schedule" ]; then
+            echo "active=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Round-tripped through date(1), not just shape-matched: 2026-99-99 has the right
+          # shape and sorts as a far-future date, so a typo would silently leave the
+          # five-minute schedule running forever — the runaway this guard exists to stop.
+          parsed=$(date -u -d "$ACTIVE_UNTIL" +%Y-%m-%d 2>/dev/null || true)
+          if [ "$parsed" != "$ACTIVE_UNTIL" ]; then
+            echo "::error::VAL_ACTIVE_UNTIL must be a real YYYY-MM-DD date, got '$ACTIVE_UNTIL'"
+            exit 1
+          fi
+          if [ "$(date -u +%Y-%m-%d)" \> "$ACTIVE_UNTIL" ]; then
+            echo "Past $ACTIVE_UNTIL — scheduled runs are done. Use workflow_dispatch to force one."
+            echo "active=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.window.outputs.active == 'true'
+        uses: actions/checkout@v7
+
+      - uses: pnpm/setup@v2
+        if: steps.window.outputs.active == 'true'
+        with:
+          cache: true
+
+      - name: Fail early if the bucket credentials are missing
+        if: steps.window.outputs.active == 'true'
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_S3_ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_S3_ENDPOINT; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+
+      # Verifies MD5, certificate validity, RSA signature and the `test` field. Exits
+      # non-zero and writes nothing if any of those fail. An index with no archives yet
+      # (before polls close) is not an error: it exits 0 having done nothing.
+      - name: Fetch and verify result files
+        if: steps.window.outputs.active == 'true'
+        env:
+          VAL_SELECT: ${{ inputs.select || vars.VAL_SELECT || '_00_RD\.zip$' }}
+        run: node --experimental-strip-types scripts/fetchResults.ts verified
+
+      - name: Count verified files
+        if: steps.window.outputs.active == 'true'
+        id: check
+        run: |
+          set -euo pipefail
+          # fetchResults creates this even when it has nothing to do, but make the step
+          # independent of that: find on a missing directory exits 1 and pipefail would
+          # kill the step before count= was ever written.
+          mkdir -p verified
+          # The `tr` is belt-and-braces, not a fix: GNU wc does not pad when it reads a pipe
+          # (checked on coreutils 9.4, which is what ubuntu-24.04 ships — `count=0`, length 1),
+          # so the padding review flagged does not occur on this runner. BSD and busybox wc do
+          # pad, though, and every condition below compares against the exact string "0", so
+          # one pipe buys immunity to ever moving this job off a GNU runner.
+          count=$(find verified -maxdepth 1 -name '*.json' | wc -l | tr -d '[:space:]')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Verified files: $count"
+
+      - name: Trim the result files
+        if: steps.check.outputs.count != '0' && steps.check.outputs.count != ''
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p publish
+          for f in verified/*rostfordelning*.json; do
+            node --experimental-strip-types scripts/trimResults.ts "$f" "publish/$(basename "$f")"
+          done
+          # mandatfordelning is a couple of hundred kB and carries the seat allocation and
+          # the threshold the app reads, so it ships as published.
+          for f in verified/*mandatfordelning*.json; do cp "$f" "publish/$(basename "$f")"; done
+          # Assert the votes landed, not merely that something did: with nullglob an empty
+          # rostfordelning glob makes the loop a no-op, and the copied mandatfordelning
+          # alone would satisfy a bare "is publish/ non-empty" check.
+          # Both or neither. The app reads the threshold, the party names and the national
+          # percentages from mandatfordelning and the district votes from rostfordelning,
+          # so publishing one without the other leaves it combining two different snapshots.
+          for kind in rostfordelning mandatfordelning; do
+            test -n "$(find publish -maxdepth 1 -name "*${kind}*.json")" || {
+              echo "::error::No ${kind} in publish/ — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
+          # "One of each" is not the invariant. The default selector takes both countings, so
+          # a preliminary rostfordelning beside a final mandatfordelning satisfies the loop
+          # above while leaving the app combining two different snapshots — the exact thing
+          # the "Both or neither" note claims to prevent. Pair them by name instead: the two
+          # files of a snapshot differ only in that one token.
+          for f in publish/*rostfordelning*.json; do
+            [ -f "${f/rostfordelning/mandatfordelning}" ] || {
+              echo "::error::$(basename "$f") has no matching mandatfordelning — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
+          for f in publish/*mandatfordelning*.json; do
+            [ -f "${f/mandatfordelning/rostfordelning}" ] || {
+              echo "::error::$(basename "$f") has no matching rostfordelning — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
+          ls -la publish
+
+      # Gzipped at rest with Content-Encoding set, because B2 does not compress on the fly:
+      # the app currently downloads every one of these files uncompressed.
+      - name: Compress
+        if: steps.check.outputs.count != '0' && steps.check.outputs.count != ''
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # gzip and mv are deliberately separate statements. Joined with && they sit on
+          # the left of a list, which `set -e` exempts, so a failed gzip would leave plain
+          # JSON in place, get uploaded labelled Content-Encoding: gzip, break the app in
+          # the browser, and still report success.
+          for f in publish/*.json; do
+            gzip -9 -c "$f" > "$f.gz"
+            mv "$f.gz" "$f"
+            file "$f" | grep -q 'gzip compressed' || {
+              echo "::error::$f is not gzip after compression"
+              exit 1
+            }
+          done
+          ls -la publish
+
+      - name: Upload to Backblaze
+        if: steps.check.outputs.count != '0' && steps.check.outputs.count != ''
+        env:
+          # Via env, never interpolated into the script text: a secret containing a quote
+          # or $(...) would otherwise be executed by the shell.
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          BUCKET: ${{ secrets.B2_BUCKET }}
+          ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # aws signs every request with the access key and secret and sends it wherever this
+          # names, so the endpoint is validated as a whole rather than by scheme alone.
+          # Requiring https:// was not enough: https://s3.us-west-001.attacker.example passed
+          # that check and derived a clean region, which would have shipped the bucket
+          # credentials to it.
+          # No part of the value is echoed, here or below. Actions masks occurrences of the
+          # exact secret string, so printing a *substring* — a host with userinfo, say
+          # `user:password@...` — defeats the masking and puts it in the log in clear text.
+          case "$ENDPOINT" in
+            https://*) ;;
+            *) echo "::error::B2_S3_ENDPOINT must start with https://"; exit 1 ;;
+          esac
+          # Everything between the scheme and the first "/" is the host, so userinfo, a port
+          # or a query string stay attached and fail the match below instead of being trimmed
+          # away and ignored.
+          host=${ENDPOINT#https://}
+          host=${host%%/*}
+          # A regex, not a glob. `s3.*.backblazeb2.com` looks strict but `*` matches URL
+          # punctuation too, and the URL parser stops at that punctuation while the glob does
+          # not — so the host it validated was not the host aws would connect to:
+          #   https://s3.evil?x.backblazeb2.com  passed, real host s3.evil
+          #   https://s3.evil#x.backblazeb2.com  passed, real host s3.evil
+          #   https://s3.evil@x.backblazeb2.com  passed, real host x.backblazeb2.com
+          # The first two would have signed the bucket credentials and sent them to s3.evil.
+          # This spells out every character a region label may contain, so anything that could
+          # end the host early cannot appear, and the region comes from the capture rather
+          # than from a second pass over the string.
+          if [[ ! "$host" =~ ^s3\.([a-z0-9-]+)\.backblazeb2\.com$ ]]; then
+            echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host"
+            exit 1
+          fi
+          AWS_DEFAULT_REGION="${BASH_REMATCH[1]}"
+          export AWS_DEFAULT_REGION
+          echo "Region: $AWS_DEFAULT_REGION"
+          # mandatfordelning first, then rostfordelning. This does NOT make the pair atomic:
+          # `aws s3 cp` overwrites in place, so a run that dies between the two leaves a new
+          # mandatfordelning beside an old rostfordelning, and max-age=60 lets a browser
+          # cache the two independently even on a clean run. Dated object names plus a
+          # pointer flip is the only thing that would actually fix it. The order is kept
+          # because the votes are the larger and later-changing file.
+          for f in publish/*mandatfordelning*.json publish/*rostfordelning*.json; do
+            aws s3 cp "$f" "s3://$BUCKET/data/election-results/$(basename "$f")" \
+              --endpoint-url "$ENDPOINT" \
+              --content-type application/json \
+              --content-encoding gzip \
+              --cache-control "public, max-age=60"
+          done
+
+      - name: Summary
+        # Not gated on the window output: if the window step itself fails, that output is
+        # empty and the run would finish with no summary at all.
+        if: always() && steps.window.outputs.active != 'false'
+        env:
+          COUNT: ${{ steps.check.outputs.count }}
+          STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### Election data update"
+            echo ""
+            if [ "$STATUS" != "success" ]; then
+              # Without this branch a hard verification failure printed the same benign
+              # "nothing published yet" text as a quiet no-op run.
+              echo "**Run failed — nothing was published.** See the failing step above."
+            elif [ "${COUNT:-0}" = "0" ]; then
+              echo "Valmyndigheten has published nothing yet — no upload."
+            else
+              echo "Published $COUNT verified file(s)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
