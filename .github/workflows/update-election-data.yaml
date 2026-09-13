@@ -48,6 +48,10 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-24.04-arm
+    # fetchResults uses bare fetch() with no timeout, and the concurrency group does not
+    # cancel in progress — so a stalled connection would otherwise hold the group for the
+    # default six hours and silently drop every queued poll on election night.
+    timeout-minutes: 10
     steps:
       # A scheduled job has no natural end. Without this it would run ~105k times a year,
       # each one a checkout, an install and a request to resultat.val.se.

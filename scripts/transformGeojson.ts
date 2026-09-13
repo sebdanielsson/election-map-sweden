@@ -13,7 +13,8 @@ const round = (n: number): number => Number(n.toFixed(COORDINATE_DECIMALS));
 
 // Define and register the projections
 proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
-proj4.defs("EPSG:4326");
+/* EPSG:4326 needs no definition — proj4 ships it built in. A one-argument defs() call is
+ * a getter, so the line that used to sit here defined nothing. */
 
 // Transformer
 const transformCoordinate = (coord: [number, number]): [number, number] => {

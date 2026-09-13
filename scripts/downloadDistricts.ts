@@ -56,7 +56,13 @@ const downloadAndExtract = async (url: string) => {
    * describing the *compressed* bytes, so comparing the two would reject a perfectly good
    * download. rawHeaders still carries the original, so use that to detect the case. */
   const rawHeaders: string[] = response.request?.res?.rawHeaders ?? [];
-  const wasEncoded = rawHeaders.some((header) => header.toLowerCase() === "content-encoding");
+  /* rawHeaders is a flat [name, value, name, value, ...] list, so only even indices are
+   * names. Scanning it whole matches a header whose *value* happens to be the string —
+   * `Vary: Content-Encoding`, which CDNs send constantly — and that silently turns the
+   * size check off for that county. */
+  const wasEncoded = rawHeaders.some(
+    (header, index) => index % 2 === 0 && header.toLowerCase() === "content-encoding",
+  );
   const expected = Number(response.headers["content-length"]);
   const written = fs.statSync(zipFile).size;
   if (!wasEncoded && Number.isFinite(expected) && expected > 0 && written !== expected) {
@@ -75,8 +81,14 @@ const downloadAndExtract = async (url: string) => {
   const extracted = geoJsonFilesIn(outputDir).filter((f) => !before.has(f));
 
   console.log(`Downloaded and extracted ${extracted.length} GeoJSON files from ${url}`);
+  /* Throw rather than log. An archive that extracts nothing — a layout change, entries
+   * nested in a subdirectory — otherwise left twenty counties transforming happily and the
+   * run green, with one county simply absent from the map. transformGeojson only objects
+   * when *no* files exist at all, so nothing downstream would have noticed either. */
   if (extracted.length === 0) {
-    console.log("Files in directory:", fs.readdirSync(outputDir).join(", "));
+    throw new Error(
+      `extracted no GeoJSON; archive contains: ${fs.readdirSync(outputDir).slice(0, 10).join(", ")}`,
+    );
   }
 };
 
@@ -93,6 +105,13 @@ const downloadAllDistricts = async () => {
       console.error(`Failed to download or extract ${url}:`, error);
       failed.push(url);
     }
+  }
+  /* One file per archive, or something went missing quietly. */
+  const produced = geoJsonFilesIn(outputDir).length;
+  if (failed.length === 0 && produced < districtsUrls.length) {
+    throw new Error(
+      `expected ${districtsUrls.length} district files, found ${produced} in ${outputDir}`,
+    );
   }
   if (failed.length > 0) {
     throw new Error(
