@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import axios from "axios";
 import * as unzipper from "unzipper";
+import { pipeline } from "node:stream/promises";
 import { electionIds, getElection } from "./elections.ts";
 
 // Usage: downloadDistricts.ts <election-id> <output-dir>
@@ -40,14 +41,22 @@ const downloadAndExtract = async (url: string) => {
     responseType: "stream",
   });
 
-  const writer = fs.createWriteStream(zipFile);
+  /* pipeline(), not pipe() plus writer events. A body cut mid-transfer errors the *response*
+   * stream, which unpipes without ending the writer: `finish` never fires, `error` never
+   * fires on the writer, and the promise never settles. The await then hangs, the loop below
+   * never advances, node drains the event loop and exits 0 — eleven counties on disk out of
+   * twenty-one, no error, green run. pipeline() observes both ends. */
+  await pipeline(response.data as NodeJS.ReadableStream, fs.createWriteStream(zipFile));
 
-  response.data.pipe(writer);
-
-  await new Promise<void>((resolve, reject) => {
-    writer.on("finish", () => resolve());
-    writer.on("error", (err) => reject(err));
-  });
+  /* A truncated body that still ends cleanly would slip past pipeline(), so check the size
+   * we were promised against the size we got. */
+  const expected = Number(response.headers["content-length"]);
+  const written = fs.statSync(zipFile).size;
+  if (Number.isFinite(expected) && expected > 0 && written !== expected) {
+    throw new Error(
+      `truncated download: expected ${String(expected)} bytes, wrote ${String(written)}`,
+    );
+  }
 
   await fs
     .createReadStream(zipFile)

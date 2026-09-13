@@ -12,8 +12,10 @@
  *   3. Every JSON in the archive carries a detached RSA signature (<name>_sign.sha256,
  *      256 bytes, sha256WithRSAEncryption) which must verify against Valmyndigheten's
  *      signing certificate.
- *   4. A file flagged `test: true` is refused outright — the spec says the field is only
- *      present in test data.
+ *   4. A file carrying a `test` field at all is refused. The spec says the field is only
+ *      present in test data ("annars saknas denna"), and production files confirm it —
+ *      the 2024 and 2022 files have no such key — so presence is the signal, not the
+ *      value. Checking `=== true` would let `"test": "true"` or `"test": 1` through.
  */
 
 import { execFileSync } from "node:child_process";
@@ -80,6 +82,17 @@ const main = async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "valresultat-"));
   const certPath = path.join(workDir, "val-sign-crt.pem");
   fs.writeFileSync(certPath, cert);
+  /* Not a root of trust — the certificate comes from the same host as the data, so this
+   * proves integrity and provenance-as-served, not that Valmyndigheten signed it. It still
+   * catches an expired or not-yet-valid certificate, which openssl does not check on its
+   * own during `dgst -verify`. Pinning the SPKI hash would be the stronger control. */
+  try {
+    execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-checkend", "0"], {
+      stdio: "pipe",
+    });
+  } catch {
+    die("Valmyndigheten's signing certificate is expired or not yet valid");
+  }
   const publicKey = execFileSync("openssl", ["x509", "-pubkey", "-noout", "-in", certPath]);
   const publicKeyPath = path.join(workDir, "pub.pem");
   fs.writeFileSync(publicKeyPath, publicKey);
@@ -102,7 +115,12 @@ const main = async () => {
     fs.writeFileSync(zipPath, archive);
     execFileSync("unzip", ["-o", "-q", zipPath, "-d", unpacked]);
 
-    for (const name of fs.readdirSync(unpacked).filter((f) => f.endsWith(".json"))) {
+    const jsonFiles = fs.readdirSync(unpacked).filter((f) => f.toLowerCase().endsWith(".json"));
+    if (jsonFiles.length === 0) {
+      die(`${href}: archive contains no JSON at its top level — refusing to report success`);
+    }
+
+    for (const name of jsonFiles) {
       const jsonPath = path.join(unpacked, name);
       const signaturePath = path.join(unpacked, `${name.replace(/\.json$/, "")}_sign.sha256`);
 
@@ -119,9 +137,12 @@ const main = async () => {
         die(`${name}: signature does NOT verify against Valmyndigheten's certificate`);
       }
 
-      const parsed = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as { test?: boolean };
-      if (parsed.test === true) {
-        die(`${name}: flagged \`test: true\` — this is test data, refusing to publish it`);
+      const parsed = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as Record<string, unknown>;
+      if ("test" in parsed) {
+        die(
+          `${name}: carries a \`test\` field (${JSON.stringify(parsed.test)}) — ` +
+            `production files have none, refusing to publish it`,
+        );
       }
 
       fs.copyFileSync(jsonPath, path.join(outputDir, name));

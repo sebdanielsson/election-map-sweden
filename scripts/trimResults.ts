@@ -42,10 +42,10 @@ interface RostfordelningIn {
   senasteUppdateringstid?: string;
   antalValdistriktRaknade?: number;
   antalValdistriktSomSkaRaknas?: number;
-  /* Present and true only in test files. The spec is explicit: "Om true innehåller filen
-   * testdata, annars saknas denna." Publishing one of those as real results is the worst
-   * failure this pipeline could have, so it is a hard stop. */
-  test?: boolean;
+  /* Only present in test files: "Om true innehåller filen testdata, annars saknas denna",
+   * and the real 2024 and 2022 files carry no such key. Presence is therefore the signal —
+   * checking the value would let `"test": "true"` through. */
+  test?: unknown;
   valdistrikt?: ValdistriktIn[];
 }
 
@@ -63,8 +63,11 @@ const fail: (message: string) => never = (message) => {
 
 const source = JSON.parse(fs.readFileSync(inputFile, "utf8")) as RostfordelningIn;
 
-if (source.test === true) {
-  fail("file is flagged `test: true` — this is Valmyndigheten test data, refusing to publish it");
+if ("test" in source) {
+  fail(
+    `carries a \`test\` field (${JSON.stringify(source.test)}) — ` +
+      `production files have none, refusing to publish it`,
+  );
 }
 
 const districts = source.valdistrikt;
@@ -108,11 +111,18 @@ const trimmed = {
     const parties = paverkaMandat?.partiRoster ?? [];
     if (parties.length === 0) withoutParties += 1;
     for (const party of parties) {
-      if (party.partikod && !partier.has(party.partikod)) {
-        partier.set(party.partikod, {
-          partiforkortning: party.partiforkortning ?? null,
-          partibeteckning: party.partibeteckning ?? null,
-        });
+      if (!party.partikod) continue;
+      /* Best-wins rather than first-wins. The per-row partibeteckning is dropped below, so
+       * if the first district that happens to mention a party carries a blank name, a
+       * first-wins map would store the blank and the app would fall back to rendering the
+       * bare party code — defeating the reason this lookup exists. */
+      const existing = partier.get(party.partikod);
+      const candidate = {
+        partiforkortning: party.partiforkortning ?? null,
+        partibeteckning: party.partibeteckning ?? null,
+      };
+      if (!existing || (!existing.partibeteckning?.trim() && candidate.partibeteckning?.trim())) {
+        partier.set(party.partikod, candidate);
       }
     }
     if (district.valdistriktstyp === "uppsamlingsdistrikt") collectionDistricts += 1;

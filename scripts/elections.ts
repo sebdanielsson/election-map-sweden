@@ -18,31 +18,33 @@ export interface ElectionSource {
 
 const VAL_SE = "https://www.val.se";
 
-/* 2024 used opaque /download/ ids with no discoverable pattern; 2026 does too, so both
- * lists stay hand-maintained. Re-fetch them from the "Rådata" page when a new election
- * is added rather than trying to guess the ids. */
+/* Both lists are hand-maintained: the /download/ ids are opaque and have no discoverable
+ * pattern. They are also not stable — val.se re-issued every 2024 id under a new prefix at
+ * some point after this project first hardcoded them, and the original twenty-one all
+ * return 404 today. Re-fetch from the "Rådata" page rather than guessing, and expect to
+ * have to do it again. */
 const EU_VAL_2024_DISTRICTS = [
-  "/download/18.5acd32d818deefef85cfbe/1710431898533/valdistrikt-blekinge-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfc0/1710431917792/valdistrikt-dalarnas-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfc2/1710431935757/valdistrikt-gavleborgs-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfc4/1710431950738/valdistrikt-gotlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfc6/1710431966012/valdistrikt-hallands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfc8/1710431981447/valdistrikt-jamtlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfca/1710431995574/valdistrikt-jonkopings-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfcc/1710432008974/valdistrikt-kalmar-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfce/1710432023047/valdistrikt-kronobergs-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfd0/1710432038927/valdistrikt-norrbottens-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfd2/1710432058310/valdistrikt-skane-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfd4/1710946075746/valdistrikt-sodermanlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfd6/1710432087226/valdistrikt-stockholms-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfd8/1710432103944/valdistrikt-uppsala-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfda/1710432118710/valdistrikt-varmlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfdc/1710432134273/valdistrikt-vasterbottens-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfde/1710432151134/valdistrikt-vasternorrlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfe0/1710432166106/valdistrikt-vastmanlands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfe2/1710432182831/valdistrikt-vastra-gotalands-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfe4/1710432198776/valdistrikt-orebro-lan-eu-val.zip",
-  "/download/18.5acd32d818deefef85cfe6/1710432226966/valdistrikt-ostergotlands-lan-eu-val.zip",
+  "/download/18.162047b519a91d053311b7d8/1760947831307/valdistrikt-blekinge-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7d7/1760947841277/valdistrikt-dalarnas-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7dd/1760947851253/valdistrikt-gavleborgs-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7e0/1760947861012/valdistrikt-gotlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7df/1760947872596/valdistrikt-hallands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7e2/1760947883375/valdistrikt-jamtlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7e1/1760947895179/valdistrikt-jonkopings-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7e3/1760947903123/valdistrikt-kalmar-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f1/1760947913942/valdistrikt-kronobergs-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f3/1760947923327/valdistrikt-norrbottens-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f4/1760947957062/valdistrikt-skane-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f6/1760947975598/valdistrikt-stockholms-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f7/1760947966287/valdistrikt-sodermanlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f9/1760947985838/valdistrikt-uppsala-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f8/1760947996767/valdistrikt-varmlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7fa/1760948008697/valdistrikt-vasterbottens-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7ee/1760948017481/valdistrikt-vasternorrlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7ed/1760948027492/valdistrikt-vastmanlands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7ef/1760948037181/valdistrikt-vastra-gotalands-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f2/1760947933874/valdistrikt-orebro-lan-eu-val-2024.zip",
+  "/download/18.162047b519a91d053311b7f5/1760947942933/valdistrikt-ostergotlands-lan-eu-val-2024.zip",
 ];
 
 const VAL_2026_DISTRICTS = [

@@ -35,7 +35,10 @@ const getDistrictResults = (
   const paverkaMandat = districtData.rostfordelning.rosterPaverkaMandat;
   return {
     parties: paverkaMandat.partiRoster,
-    ovrigaShare: paverkaMandat.rosterOvrigaPartier.andelRoster,
+    /* Optional on purpose: a partial or preliminary file that omits it would otherwise
+     * throw inside the Mapbox click handler, where nothing catches it — the sidebar would
+     * silently keep the previous district's numbers. */
+    ovrigaShare: paverkaMandat.rosterOvrigaPartier?.andelRoster ?? null,
   };
 };
 
@@ -304,7 +307,15 @@ export default function App() {
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
         );
-        setThreshold(fetchedNationalResultsData.valomrade.valomradessparrProcent);
+        const publishedThreshold = fetchedNationalResultsData.valomrade.valomradessparrProcent;
+        /* Guarded rather than trusted: anything non-numeric makes both comparisons below
+         * false, which empties both groups and renders a header-only table instead of
+         * falling back to the default. */
+        setThreshold(
+          typeof publishedThreshold === "number" && Number.isFinite(publishedThreshold)
+            ? publishedThreshold
+            : null,
+        );
         setPartyNames(fetchedRostfordelningData.partier ?? null);
         setLoading(false);
 

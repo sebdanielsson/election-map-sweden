@@ -67,6 +67,9 @@ interface NormalisedDistrict {
 const normaliseProperties = (props: Record<string, unknown> | null): NormalisedDistrict => {
   const read = (key: string): string | undefined => {
     const value = props?.[key];
+    /* Numbers are accepted too: a district code published as 10820101 rather than
+     * "10820101" would otherwise be dropped, nulling the join key for a whole county. */
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
     return typeof value === "string" && value !== "" ? value : undefined;
   };
 
@@ -119,11 +122,31 @@ files.forEach((file) => {
   // Load the GeoJSON file
   const geojson_data: FeatureCollection = JSON.parse(fs.readFileSync(inputFilePath, "utf8"));
 
+  /* The source declares EPSG:3006 and we have just reprojected to WGS84. Leaving the old
+   * declaration in place makes the published file lie to every consumer that reads it —
+   * QGIS and ogr2ogr would reproject a second time. RFC 7946 GeoJSON is WGS84 by
+   * definition, so the honest thing is to drop the member rather than restate it. */
+  delete (geojson_data as { crs?: unknown }).crs;
+
   // Transform the geometries and normalise the properties
   geojson_data.features.forEach((feature: Feature) => {
     feature.geometry = transformCoordinates(feature.geometry);
     feature.properties = normaliseProperties(feature.properties);
   });
+
+  /* The results side refuses to publish a district with no code; the geometry side is the
+   * other half of the same join and had no equivalent check. A property rename upstream, or
+   * a code published as a number rather than a string, would otherwise null every key here
+   * and still report success. */
+  const missingCode = geojson_data.features.filter(
+    (feature) => !(feature.properties as NormalisedDistrict | null)?.Lkfv,
+  ).length;
+  if (missingCode > 0) {
+    console.error(
+      `${file}: ${String(missingCode)} of ${String(geojson_data.features.length)} features have no district code — refusing to write`,
+    );
+    process.exit(1);
+  }
 
   // Save the transformed GeoJSON to the output file
   fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data));
