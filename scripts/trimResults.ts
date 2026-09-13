@@ -75,6 +75,38 @@ if (!districts || districts.length === 0) {
   fail('no "valdistrikt" array — is this a rostfordelning file?');
 }
 
+/* Provenance is the answer to "which snapshot is this", and JSON.stringify drops an
+ * undefined value entirely — so an upstream file that stopped carrying one of these would
+ * publish a file missing a field `Rostfordelning` declares as always present, with nothing
+ * failing anywhere. The district checks below already fail closed on schema drift; these
+ * fields deserve the same treatment, because a preliminary count presented as a final one
+ * is the failure that matters on election night.
+ *
+ * An explicit null passes: the app's type allows it and it survives serialisation. Only an
+ * absent key or a wrong type is refused. Verified present and correctly typed in every real
+ * rostfordelning checked — 2022 riksdag and 2024 EU — so this does not reject good input. */
+const requiredProvenance: [keyof RostfordelningIn, "string" | "number"][] = [
+  ["valtillfalle", "string"],
+  ["valtyp", "string"],
+  ["rakningstillfalle", "string"],
+  ["senasteUppdateringstid", "string"],
+  ["antalValdistriktRaknade", "number"],
+  ["antalValdistriktSomSkaRaknas", "number"],
+];
+const provenanceProblems = requiredProvenance.flatMap(([key, kind]) => {
+  if (!Object.hasOwn(source, key)) return [`${key} is absent`];
+  const value = source[key];
+  if (value === null) return [];
+  if (typeof value !== kind) return [`${key} is ${typeof value}, expected ${kind} or null`];
+  return [];
+});
+if (provenanceProblems.length > 0) {
+  fail(
+    `provenance unusable: ${provenanceProblems.join("; ")} — refusing to publish a snapshot ` +
+      `that cannot be identified as preliminary or final`,
+  );
+}
+
 /* A district with no partiRoster is not necessarily wrong (an uncounted district reports
  * an empty array), but silently shipping a file that is mostly empty is. Counting them
  * here means the operator sees it rather than discovering it on the map. */

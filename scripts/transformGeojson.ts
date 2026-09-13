@@ -123,6 +123,27 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+/* Both extensions are accepted and `.geojson` is normalised to `.json` on the way out, so
+ * `county.json` and `county.geojson` resolve to one output name. The write loop then
+ * overwrote the first silently while the success message still counted both: verified, two
+ * inputs went in, "Wrote 2 files" came out, and one county was simply gone. Checked here,
+ * before any parsing, because the cheapest place to refuse is before the work. */
+const normalisedOwner = new Map<string, string>();
+const nameCollisions: { name: string; first: string; second: string }[] = [];
+for (const file of files) {
+  const normalised = file.replace(/\.geojson$/, ".json");
+  const first = normalisedOwner.get(normalised);
+  if (first === undefined) normalisedOwner.set(normalised, file);
+  else nameCollisions.push({ name: normalised, first, second: file });
+}
+if (nameCollisions.length > 0) {
+  const shown = nameCollisions
+    .map(({ name, first, second }) => `${first} and ${second} both become ${name}`)
+    .join(", ");
+  console.error(`Input files collide after normalisation: ${shown} — refusing to write`);
+  process.exit(1);
+}
+
 const transformed: { path: string; data: string; file: string }[] = [];
 
 /* Codes are the join key: the app resolves a district's results with
