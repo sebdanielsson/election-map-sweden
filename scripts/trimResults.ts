@@ -77,6 +77,30 @@ const numberOrNull = (value: unknown, where: string): number | null => {
   return value;
 };
 
+/* An absent *container* and an absent *member of a present container* are different facts.
+ * numberOrNull maps undefined to null, which is right for a bucket that simply is not there
+ * and wrong for one that is: `rosterOvrigaPartier: {}` would publish as a null share, and
+ * App.tsx turns a null other-party share into 0 — quietly understating Others rather than
+ * failing. So presence is checked where the container exists. */
+const requiredNumberMember = (container: object, key: string, where: string): number | null => {
+  if (!Object.hasOwn(container, key)) {
+    fail(`${where} is absent from a bucket that is present — refusing to publish it as null`);
+  }
+  return numberOrNull((container as Record<string, unknown>)[key], where);
+};
+
+/* The labels get the same treatment as the numbers, for the same reason: they are only cast,
+ * not checked. App.tsx renders a party with `partiforkortning?.trim()`, so a row carrying a
+ * number there throws while the sidebar is rendering — a district click that breaks the page.
+ * Verified against the real 2022 riksdag file: all 52,624 rows carry a string. */
+const stringOrNull = (value: unknown, where: string): string | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    fail(`${where} is ${typeof value}, expected a string or null`);
+  }
+  return value;
+};
+
 const fail: (message: string) => never = (message) => {
   console.error(`${path.basename(inputFile)}: ${message}`);
   process.exit(1);
@@ -215,10 +239,17 @@ const trimmed = {
       rostfordelning: {
         rosterPaverkaMandat: {
           partiRoster: parties.map((party) => ({
-            partikod: party.partikod ?? null,
-            partiforkortning: party.partiforkortning ?? null,
-            andelRoster: numberOrNull(
-              party.andelRoster,
+            partikod: stringOrNull(
+              party.partikod,
+              `district ${district.valdistriktskod ?? "(no code)"} partikod`,
+            ),
+            partiforkortning: stringOrNull(
+              party.partiforkortning,
+              `district ${district.valdistriktskod ?? "(no code)"} party ${party.partikod ?? "(no code)"} partiforkortning`,
+            ),
+            andelRoster: requiredNumberMember(
+              party,
+              "andelRoster",
               `district ${district.valdistriktskod ?? "(no code)"} party ${party.partikod ?? "(no code)"} andelRoster`,
             ),
           })),
@@ -230,14 +261,22 @@ const trimmed = {
            * null, publishing the district as if nobody voted for a small party. Absent stays
            * legal (the type allows partial files); present-but-not-an-object does not. */
           rosterOvrigaPartier: {
-            antalRoster: numberOrNull(
-              paverkaMandat?.rosterOvrigaPartier?.antalRoster,
-              `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.antalRoster`,
-            ),
-            andelRoster: numberOrNull(
-              paverkaMandat?.rosterOvrigaPartier?.andelRoster,
-              `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.andelRoster`,
-            ),
+            antalRoster:
+              ovriga == null
+                ? null
+                : requiredNumberMember(
+                    ovriga,
+                    "antalRoster",
+                    `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.antalRoster`,
+                  ),
+            andelRoster:
+              ovriga == null
+                ? null
+                : requiredNumberMember(
+                    ovriga,
+                    "andelRoster",
+                    `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.andelRoster`,
+                  ),
           },
         },
       },

@@ -228,20 +228,21 @@ jobs:
           # away and ignored.
           host=${ENDPOINT#https://}
           host=${host%%/*}
-          case "$host" in
-            s3.*.backblazeb2.com) ;;
-            *) echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host"; exit 1 ;;
-          esac
-          # Region comes from the endpoint rather than being hardcoded, so the secret stays
-          # the single source of truth: https://s3.us-west-001.backblazeb2.com -> us-west-001
-          AWS_DEFAULT_REGION=${host#s3.}
-          AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION%.backblazeb2.com}
-          case "$AWS_DEFAULT_REGION" in
-            "" | *.*)
-              echo "::error::Could not derive a single region label from B2_S3_ENDPOINT"
-              exit 1
-              ;;
-          esac
+          # A regex, not a glob. `s3.*.backblazeb2.com` looks strict but `*` matches URL
+          # punctuation too, and the URL parser stops at that punctuation while the glob does
+          # not — so the host it validated was not the host aws would connect to:
+          #   https://s3.evil?x.backblazeb2.com  passed, real host s3.evil
+          #   https://s3.evil#x.backblazeb2.com  passed, real host s3.evil
+          #   https://s3.evil@x.backblazeb2.com  passed, real host x.backblazeb2.com
+          # The first two would have signed the bucket credentials and sent them to s3.evil.
+          # This spells out every character a region label may contain, so anything that could
+          # end the host early cannot appear, and the region comes from the capture rather
+          # than from a second pass over the string.
+          if [[ ! "$host" =~ ^s3\.([a-z0-9-]+)\.backblazeb2\.com$ ]]; then
+            echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host"
+            exit 1
+          fi
+          AWS_DEFAULT_REGION="${BASH_REMATCH[1]}"
           export AWS_DEFAULT_REGION
           echo "Region: $AWS_DEFAULT_REGION"
           # mandatfordelning first, then rostfordelning. This does NOT make the pair atomic:
