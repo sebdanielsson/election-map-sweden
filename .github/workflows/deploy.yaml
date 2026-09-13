@@ -71,9 +71,21 @@ jobs:
           cache: true
 
       - name: Install Vercel CLI
-        # Pinned: an unpinned CLI changes the build and deploy behaviour of this workflow
-        # without any commit here to explain it.
-        run: pnpm add --global vercel@48.2.11
+        # Into a scratch directory outside the repository, not globally: `pnpm add --global`
+        # needs a global bin directory that `pnpm/setup` does not configure, and it failed
+        # immediately on the first run with the secrets in place. Installing here also keeps
+        # package.json and the lockfile untouched, so the tree the build sees is the tree that
+        # was committed.
+        #
+        # Pinned: an unpinned CLI changes how this workflow builds and deploys with no commit
+        # here to explain it.
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vercel-cli"
+          cd "$RUNNER_TEMP/vercel-cli"
+          pnpm init >/dev/null
+          pnpm add vercel@48.2.11
+          echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Environment is decided once and reused, so the pull, the build and the deploy cannot
       # disagree about which one they are targeting.
