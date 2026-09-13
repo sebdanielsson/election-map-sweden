@@ -32,6 +32,14 @@ concurrency:
 
 jobs:
   deploy:
+    # Same-repository events only. GitHub withholds secrets from `pull_request` runs on forks,
+    # so a fork would fail the credentials check on every push — and more to the point, this
+    # job runs the checked-out branch's build scripts with VERCEL_TOKEN in the environment.
+    # That is fine for branches in this repository, whose authors already have the secrets, and
+    # is not something to offer an arbitrary fork.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
@@ -71,9 +79,15 @@ jobs:
       # disagree about which one they are targeting.
       - name: Resolve target environment
         id: target
+        env:
+          # Read from the environment, not interpolated into the script. workflow_dispatch can
+          # run on any branch, and a branch name containing shell metacharacters would
+          # otherwise be pasted straight into this `if` as source.
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ "$REF" = "refs/heads/main" ] && [ "$EVENT" != "pull_request" ]; then
             echo "environment=production" >> "$GITHUB_OUTPUT"
             echo "prod_flag=--prod" >> "$GITHUB_OUTPUT"
           else
@@ -100,8 +114,12 @@ jobs:
           # The build runs `dotenvx run -f .env.production -- vite build`, which needs the
           # matching private key to decrypt VITE_MAPBOX_ACCESS_TOKEN. `vercel pull` brings it
           # down when it is set as a Vercel environment variable, which is how the current
-          # Vercel builds get it; this secret is an override for when it is not, and is
-          # deliberately allowed to be empty rather than required.
+          # Vercel builds get it. Note the build command is hardwired to `.env.production` in
+          # every environment, so a preview run needs the *production* key even though it
+          # pulled the preview environment — if that key is only set on Vercel's production
+          # environment, previews need this repository secret. Left optional rather than
+          # required because the assertion below is what actually catches its absence, with a
+          # message, instead of failing here on a setup that may not need it.
           DOTENV_PRIVATE_KEY_PRODUCTION: ${{ secrets.DOTENV_PRIVATE_KEY_PRODUCTION }}
         run: |
           set -euo pipefail

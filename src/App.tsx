@@ -87,11 +87,27 @@ const fetchResults = async (election: AppElection): Promise<ElectionResults> => 
      * mismatched pair in the bucket. Skipping to the next counting is better than rendering a
      * preliminary vote count against a final seat allocation. */
     if (rost && mandat) {
-      return {
-        rostfordelning: rost as Rostfordelning,
-        mandatfordelning: mandat as Mandatfordelning,
-        counting,
-      };
+      const rostfordelning = rost as Rostfordelning;
+      const mandatfordelning = mandat as Mandatfordelning;
+      /* Both present is not the same as both current. The publishing workflow writes these two
+       * objects in separate requests and overwrites them in place, so a reader arriving
+       * mid-update gets a new mandatfordelning beside the previous rostfordelning — and
+       * `max-age=60` lets a browser hold the two independently even on a clean run. The files
+       * carry provenance precisely so this can be checked instead of assumed: if they disagree
+       * about which election and which counting they describe, they are not one snapshot. */
+      const sameSnapshot =
+        rostfordelning.valtillfalle === mandatfordelning.valtillfalle &&
+        rostfordelning.valtyp === mandatfordelning.valtyp &&
+        rostfordelning.rakningstillfalle === mandatfordelning.rakningstillfalle;
+      if (!sameSnapshot) {
+        console.warn(
+          `Skipping ${counting}: rostfordelning and mandatfordelning describe different ` +
+            `snapshots (${String(rostfordelning.rakningstillfalle)} vs ` +
+            `${String(mandatfordelning.rakningstillfalle)})`,
+        );
+        continue;
+      }
+      return { rostfordelning, mandatfordelning, counting };
     }
   }
   throw new NotPublishedError(election.label);
@@ -120,8 +136,11 @@ const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollectio
         })),
       });
     } catch (error) {
-      console.error(`Error fetching ${file}:`, error);
-      missing.push(file);
+      /* Not folded into `missing`. A 500, a DNS failure or malformed JSON is a fault, and
+       * counting it as absent would report a working election as unpublished and tell the
+       * reader to wait for figures that are already there. fetchJsonOrNull returns null for
+       * 404 and throws for everything else, so this branch is only ever a real failure. */
+      throw new Error(`Could not load ${file}: ${String(error)}`);
     }
   }
 
@@ -280,6 +299,11 @@ export default function App() {
      * added, and how many there are depends on how many county files came back. */
     const addedSourceIds: string[] = [];
     const addedLayerIds: string[] = [];
+    /* Handlers and the tooltip are torn down with the layers they read. They used to be
+     * registered on every run and never removed, so switching election stacked a second set
+     * on the same map while the first kept querying layer ids that had just been deleted and
+     * calling setData on a removed source. */
+    const cleanUps: (() => void)[] = [];
 
     const loadDataAndSetUpMap = async () => {
       /* Cleared at the start of each attempt so a previous election's verdict cannot survive
@@ -386,7 +410,7 @@ export default function App() {
         setPartyNames(fetchedRostfordelningData.partier ?? null);
         setLoading(false);
 
-        map.on("click", (e) => {
+        const onClick = (e: mapboxgl.MapMouseEvent) => {
           for (const [index] of featureCollections.entries()) {
             const sourceId = `voting-districts-${index}-fill`;
             const features = map.queryRenderedFeatures(e.point, {
@@ -419,7 +443,7 @@ export default function App() {
               }
             }
           }
-        });
+        };
 
         /* Already resolved: this effect only runs once the map exists, so the chunk is in
          * the module registry. Taken off `default` to match the constructor above —
@@ -427,12 +451,17 @@ export default function App() {
         const [{ default: mapboxgl }] = await loadMapbox();
         if (cancelled) return;
 
+        map.on("click", onClick);
+        cleanUps.push(() => {
+          map.off("click", onClick);
+        });
+
         const tooltip = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
         });
 
-        map.on("mousemove", (e) => {
+        const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
           for (const [index] of featureCollections.entries()) {
             const sourceId = `voting-districts-${index}-fill`;
             const features = map.queryRenderedFeatures(e.point, {
@@ -456,10 +485,20 @@ export default function App() {
             }
           }
           tooltip.remove();
+        };
+
+        map.on("mousemove", onMouseMove);
+        cleanUps.push(() => {
+          map.off("mousemove", onMouseMove);
+          tooltip.remove();
         });
 
-        map.on("error", (e) => {
+        const onMapError = (e: unknown) => {
           console.error("Map error:", e);
+        };
+        map.on("error", onMapError);
+        cleanUps.push(() => {
+          map.off("error", onMapError);
         });
       }
     };
@@ -490,6 +529,7 @@ export default function App() {
        * other. Removed in dependency order: a source cannot be dropped while a layer still
        * references it. */
       if (!map) return;
+      for (const undo of cleanUps) undo();
       for (const id of addedLayerIds) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
