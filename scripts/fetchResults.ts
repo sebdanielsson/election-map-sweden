@@ -20,6 +20,7 @@
 
 import { execFileSync } from "node:child_process";
 import * as unzipper from "unzipper";
+import { unsafeArchiveEntries } from "./archiveSafety.ts";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -150,13 +151,12 @@ const main = async () => {
      * `../` (verified: an entry named ../pub.pem lands inside the target, not beside it),
      * but that is unzip's behaviour rather than a guarantee of ours, and the archive comes
      * from the same host as everything else here — so nothing is independently trusted at
-     * this point. Reject anything that is not a plain top-level name. */
+     * this point. The shared helper rejects anything that is not a plain top-level name,
+     * and any symlink entry — a case the earlier inline check here did not cover. */
     const listing = await unzipper.Open.file(zipPath);
-    const unsafe = listing.files
-      .map((entry) => entry.path)
-      .filter((name) => name.includes("/") || name.includes("\\") || name.startsWith("."));
+    const unsafe = unsafeArchiveEntries(listing.files);
     if (unsafe.length > 0) {
-      die(`${href}: archive has entries outside its top level: ${unsafe.slice(0, 5).join(", ")}`);
+      die(`${href}: archive has unsafe entries: ${unsafe.slice(0, 5).join(", ")}`);
     }
     execFileSync("unzip", ["-o", "-q", zipPath, "-d", unpacked]);
 

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import axios from "axios";
 import * as unzipper from "unzipper";
 import { pipeline } from "node:stream/promises";
+import { unsafeArchiveEntries } from "./archiveSafety.ts";
 import { electionIds, getElection } from "./elections.ts";
 
 // Usage: downloadDistricts.ts <election-id> <output-dir>
@@ -68,15 +69,20 @@ const downloadAndExtract = async (url: string) => {
     );
   }
 
+  /* Inspected before a single byte is written. This used to run after extraction, which
+   * meant a hostile or merely misshapen entry had already landed somewhere by the time
+   * anything looked at it. fetchResults does the same check; they share the helper. */
+  const directory = await unzipper.Open.file(zipFile);
+  const unsafe = unsafeArchiveEntries(directory.files);
+  if (unsafe.length > 0) {
+    throw new Error(`archive has unsafe entries: ${unsafe.slice(0, 5).join(", ")}`);
+  }
+
   await fs
     .createReadStream(zipFile)
     .pipe(unzipper.Extract({ path: outputDir }))
     .promise();
 
-  /* Ask the archive what it contains rather than diffing the directory. A directory diff
-   * counts only files that were not already there, so a re-run — which legitimately
-   * overwrites the same names — looked like an archive that extracted nothing. */
-  const directory = await unzipper.Open.file(zipFile);
   const extracted = directory.files
     .map((entry) => entry.path)
     /* Top level only. transformGeojson reads the directory with readdirSync, which does not
