@@ -2,10 +2,18 @@
 name: Deploy
 
 # Builds here and deploys the result to Vercel, instead of letting Vercel's Git integration
-# build and deploy on every push (`git.deploymentEnabled: false` in vercel.json turns that off).
+# build and deploy on every push.
 #
 # main goes straight to production. Every pull request gets a preview, and its URL is posted
 # once on the PR and updated in place afterwards.
+#
+# NOT CURRENTLY THE PATH PRODUCTION TAKES. Every run of this workflow fails at `vercel pull`
+# with "Not able to load user because of unexpected error: User not found. (404)" — the CLI
+# cannot authenticate VERCEL_TOKEN at all, which is a property of the secret and not of
+# anything in this file. Until a working token is in place, vercel.json re-enables Vercel's
+# own Git integration for `main` (and only main) so the site still gets deployed. Once this
+# workflow goes green, flip vercel.json back to `"deploymentEnabled": false` so main is not
+# deployed twice.
 #
 # Why this exists: the Git integration deploys on every push with no way to say "not this one".
 # PR #781 pushed 32 commits in an afternoon and burned 32 deployments against a daily cap.
