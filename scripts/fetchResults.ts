@@ -1,5 +1,6 @@
-/* Pulls result files from Valmyndigheten, proves they are authentic and untampered, and
- * writes trimmed copies ready to upload.
+/* Pulls result files from Valmyndigheten and proves they are authentic and untampered.
+ * The verified files are written out unchanged — trimming is a separate step
+ * (scripts/trimResults.ts), which the workflow runs afterwards.
  *
  * Everything here fails closed. A file that cannot be verified is not published, because
  * publishing wrong election results is worse than publishing none: on election night the

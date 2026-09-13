@@ -20,10 +20,16 @@ if (!outputDir) {
 const election = getElection(electionId);
 const districtsUrls = election.districtUrls;
 
-// Check if output directory exists
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
+/* Archives land here first and the directory is swapped in only once every one has
+ * succeeded. Downloading straight into outputDir left whatever was already there: if
+ * val.se reissues a county under a different basename — which it has done, every 2024 id
+ * changed at some point — the old file stays, transformGeojson reads it alongside the new
+ * ones, and the count check passes because there are now *more* files than expected. A
+ * mixed-vintage map, every check green. */
+const stagingDir = `${outputDir}.staging-${String(process.pid)}`;
+
+fs.rmSync(stagingDir, { recursive: true, force: true });
+fs.mkdirSync(stagingDir, { recursive: true });
 
 /* 2024's archives contain .json, 2026's contain .geojson. Matching only one silently
  * reports "0 files extracted" for the other, so accept both. */
@@ -31,7 +37,7 @@ const geoJsonFilesIn = (dir: string) =>
   fs.readdirSync(dir).filter((f) => f.endsWith(".json") || f.endsWith(".geojson"));
 
 const downloadAndExtract = async (url: string) => {
-  const zipFile = path.join(outputDir, path.basename(url));
+  const zipFile = path.join(stagingDir, path.basename(url));
 
   const response = await axios({
     url,
@@ -80,7 +86,7 @@ const downloadAndExtract = async (url: string) => {
 
   await fs
     .createReadStream(zipFile)
-    .pipe(unzipper.Extract({ path: outputDir }))
+    .pipe(unzipper.Extract({ path: stagingDir }))
     .promise();
 
   const extracted = directory.files
@@ -121,11 +127,12 @@ const downloadAllDistricts = async () => {
       failed.push(url);
     }
   }
-  /* One file per archive, or something went missing quietly. */
-  const produced = geoJsonFilesIn(outputDir).length;
-  if (failed.length === 0 && produced < districtsUrls.length) {
+  /* Exactly one file per archive — not "at least", which a leftover from a previous run
+   * would also satisfy. The staging directory starts empty, so this is an exact count. */
+  const produced = geoJsonFilesIn(stagingDir).length;
+  if (failed.length === 0 && produced !== districtsUrls.length) {
     throw new Error(
-      `expected ${districtsUrls.length} district files, found ${produced} in ${outputDir}`,
+      `expected ${districtsUrls.length} district files, found ${produced} in ${stagingDir}`,
     );
   }
   if (failed.length > 0) {
@@ -135,7 +142,18 @@ const downloadAllDistricts = async () => {
   }
 };
 
-downloadAllDistricts().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+downloadAllDistricts()
+  .then(() => {
+    // Swap in only once every archive has succeeded.
+    fs.rmSync(outputDir, { recursive: true, force: true });
+    fs.renameSync(stagingDir, outputDir);
+    console.log(
+      `\nWrote ${String(geoJsonFilesIn(outputDir).length)} district files to ${outputDir}`,
+    );
+  })
+  .catch((error: unknown) => {
+    console.error(error);
+    /* Leave whatever was in outputDir alone — a failed run must not destroy a good set. */
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    process.exitCode = 1;
+  });

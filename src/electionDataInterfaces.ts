@@ -67,10 +67,11 @@ export interface Personrost {
 export interface RosterOvrigaPartier {
   antalRoster: number | null;
   andelRoster: number | null;
-  antalRosterForegaendeVal: number | null;
-  andelRosterForegaendeVal: number | null;
-  forandringAntalRoster: number | null;
-  forandringAndelRoster: number | null;
+  /* Comparison figures, dropped by trimResults. */
+  antalRosterForegaendeVal?: number | null;
+  andelRosterForegaendeVal?: number | null;
+  forandringAntalRoster?: number | null;
+  forandringAndelRoster?: number | null;
 }
 
 export interface Mandatfordelning {
@@ -122,7 +123,8 @@ export interface RosterPaverkaMandat {
   antalRosterForegaendeVal?: number | null;
   forandringAntalRoster?: number | null;
   partiRoster: PartiRoster[];
-  rosterOvrigaPartier: RosterOvrigaPartier;
+  /* Optional: preliminary and partial files omit it, and App.tsx reads it with `?.`. */
+  rosterOvrigaPartier?: RosterOvrigaPartier;
 }
 
 export interface RosterEjPaverkaMandat {
@@ -176,12 +178,12 @@ export interface PartiRoster {
   ordningsnummer?: number | null;
   antalRoster?: number | null;
   andelRoster: number | null;
-  deltaMandatfordelning: string | null;
-  antalRosterForegaendeVal: number | null;
-  andelRosterForegaendeVal: number | null;
-  forandringAntalRoster: number | null;
-  forandringAndelRoster: number | null;
-  listRoster: ListRoster[];
+  deltaMandatfordelning?: string | null;
+  antalRosterForegaendeVal?: number | null;
+  andelRosterForegaendeVal?: number | null;
+  forandringAntalRoster?: number | null;
+  forandringAndelRoster?: number | null;
+  listRoster?: ListRoster[];
 }
 
 export interface ListRoster {

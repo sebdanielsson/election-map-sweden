@@ -108,7 +108,17 @@ const trimmed = {
   >,
   valdistrikt: districts.map((district) => {
     const paverkaMandat = district.rostfordelning?.rosterPaverkaMandat;
-    const parties = paverkaMandat?.partiRoster ?? [];
+    /* An uncounted district legitimately reports an empty partiRoster, so an empty array is
+     * fine. A *missing* one is not: `?? []` would turn a schema change, or the wrong file
+     * being selected, into an apparently valid snapshot in which every district has no
+     * parties at all — published without complaint. */
+    if (!Array.isArray(paverkaMandat?.partiRoster)) {
+      fail(
+        `district ${district.valdistriktskod ?? "(no code)"} has no partiRoster array — ` +
+          `refusing to publish a result file with no results`,
+      );
+    }
+    const parties = paverkaMandat.partiRoster;
     if (parties.length === 0) withoutParties += 1;
     for (const party of parties) {
       if (!party.partikod) continue;
@@ -160,6 +170,18 @@ trimmed.partier = Object.fromEntries(partier);
 const missingCode = trimmed.valdistrikt.filter((d) => !d.valdistriktskod).length;
 if (missingCode > 0) {
   fail(`${String(missingCode)} districts have no valdistriktskod — refusing to publish`);
+}
+
+/* The app looks districts up with .find(), so a duplicate code means the second district's
+ * votes are silently never shown. Real files have none — 6589 codes, 6589 unique — which is
+ * precisely why a duplicate appearing would be a sign something is wrong upstream. */
+const codes = trimmed.valdistrikt.map((d) => d.valdistriktskod);
+const duplicates = [...new Set(codes.filter((code, index) => codes.indexOf(code) !== index))];
+if (duplicates.length > 0) {
+  fail(
+    `duplicate valdistriktskod: ${duplicates.slice(0, 5).join(", ")} — ` +
+      `the app resolves districts by code and would silently ignore the later one`,
+  );
 }
 
 const outputDir = path.dirname(outputFile);
