@@ -308,9 +308,9 @@ export default function App() {
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
         );
         const publishedThreshold = fetchedNationalResultsData.valomrade.valomradessparrProcent;
-        /* Guarded rather than trusted: anything non-numeric makes both comparisons below
-         * false, which empties both groups and renders a header-only table instead of
-         * falling back to the default. */
+        /* Normalised to null rather than trusted, so the `?? 4` default downstream actually
+         * applies. Passing a non-numeric value straight through would make both the `<` and
+         * `>=` comparisons false and empty both party groups instead. */
         setThreshold(
           typeof publishedThreshold === "number" && Number.isFinite(publishedThreshold)
             ? publishedThreshold

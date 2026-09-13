@@ -79,7 +79,10 @@ const downloadAndExtract = async (url: string) => {
   const directory = await unzipper.Open.file(zipFile);
   const extracted = directory.files
     .map((entry) => entry.path)
-    .filter((name) => name.endsWith(".json") || name.endsWith(".geojson"));
+    /* Top level only. transformGeojson reads the directory with readdirSync, which does not
+     * recurse, so an archive whose GeoJSON sits in a subdirectory would satisfy a
+     * "something was extracted" check and then transform nothing. */
+    .filter((name) => !name.includes("/") && (name.endsWith(".json") || name.endsWith(".geojson")));
 
   fs.unlinkSync(zipFile);
 

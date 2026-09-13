@@ -142,6 +142,14 @@ files.forEach((file) => {
    * other half of the same join and had no equivalent check. A property rename upstream, or
    * a code published as a number rather than a string (see read() above), would otherwise
    * null every key here and still report success. */
+  /* Checked before the missing-code guard, which an empty collection passes trivially: a
+   * county file with no features would be written happily and simply remove that county's
+   * districts from the map. */
+  if (geojson_data.features.length === 0) {
+    console.error(`${file}: contains no features — refusing to write`);
+    process.exit(1);
+  }
+
   const missingCode = geojson_data.features.filter(
     (feature) => !(feature.properties as NormalisedDistrict | null)?.Lkfv,
   ).length;

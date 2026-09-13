@@ -145,10 +145,15 @@ jobs:
           # Assert the votes landed, not merely that something did: with nullglob an empty
           # rostfordelning glob makes the loop a no-op, and the copied mandatfordelning
           # alone would satisfy a bare "is publish/ non-empty" check.
-          test -n "$(find publish -maxdepth 1 -name '*rostfordelning*.json')" || {
-            echo "::error::No rostfordelning in publish/ — refusing to publish seat data without votes"
-            exit 1
-          }
+          # Both or neither. The app reads the threshold, the party names and the national
+          # percentages from mandatfordelning and the district votes from rostfordelning,
+          # so publishing one without the other leaves it combining two different snapshots.
+          for kind in rostfordelning mandatfordelning; do
+            test -n "$(find publish -maxdepth 1 -name "*${kind}*.json")" || {
+              echo "::error::No ${kind} in publish/ — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
           ls -la publish
 
       # Gzipped at rest with Content-Encoding set, because B2 does not compress on the fly:

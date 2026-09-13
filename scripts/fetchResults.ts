@@ -19,6 +19,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import * as unzipper from "unzipper";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -97,8 +98,11 @@ const main = async () => {
   const cert = await get(CERT_URL);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "valresultat-"));
   const stagingDir = path.join(workDir, "staging");
+  /* Separate from workDir: the public key used to verify signatures must not sit anywhere
+   * an extracted archive could reach, whatever unzip does with a hostile entry name. */
+  const keyDir = fs.mkdtempSync(path.join(os.tmpdir(), "valkeys-"));
   fs.mkdirSync(stagingDir, { recursive: true });
-  const certPath = path.join(workDir, "val-sign-crt.pem");
+  const certPath = path.join(keyDir, "val-sign-crt.pem");
   fs.writeFileSync(certPath, cert);
   /* Not a root of trust — the certificate comes from the same host as the data, so this
    * proves integrity and provenance-as-served, not that Valmyndigheten signed it. It still
@@ -124,7 +128,7 @@ const main = async () => {
     die(`Valmyndigheten's signing certificate is not valid until ${notBefore}`);
   }
   const publicKey = execFileSync("openssl", ["x509", "-pubkey", "-noout", "-in", certPath]);
-  const publicKeyPath = path.join(workDir, "pub.pem");
+  const publicKeyPath = path.join(keyDir, "pub.pem");
   fs.writeFileSync(publicKeyPath, publicKey);
   console.log(
     `signing certificate: ${execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-subject"]).toString().trim()}`,
@@ -142,6 +146,18 @@ const main = async () => {
     fs.mkdirSync(unpacked, { recursive: true });
     const zipPath = path.join(workDir, path.basename(href));
     fs.writeFileSync(zipPath, archive);
+    /* Check the central directory before extracting. Info-ZIP's unzip does strip leading
+     * `../` (verified: an entry named ../pub.pem lands inside the target, not beside it),
+     * but that is unzip's behaviour rather than a guarantee of ours, and the archive comes
+     * from the same host as everything else here — so nothing is independently trusted at
+     * this point. Reject anything that is not a plain top-level name. */
+    const listing = await unzipper.Open.file(zipPath);
+    const unsafe = listing.files
+      .map((entry) => entry.path)
+      .filter((name) => name.includes("/") || name.includes("\\") || name.startsWith("."));
+    if (unsafe.length > 0) {
+      die(`${href}: archive has entries outside its top level: ${unsafe.slice(0, 5).join(", ")}`);
+    }
     execFileSync("unzip", ["-o", "-q", zipPath, "-d", unpacked]);
 
     const jsonFiles = fs.readdirSync(unpacked).filter((f) => f.toLowerCase().endsWith(".json"));
@@ -186,6 +202,7 @@ const main = async () => {
     fs.copyFileSync(path.join(stagingDir, name), path.join(outputDir, name));
   }
   fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(keyDir, { recursive: true, force: true });
   console.log(`\nVerified files written to ${outputDir}`);
 };
 

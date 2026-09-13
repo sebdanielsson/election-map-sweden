@@ -31,8 +31,10 @@ The data is now downloaded and verified. You can now use the data in your projec
 
 ## District maps
 
-Both scripts take the election id (see `scripts/elections.ts` for the known ids) and a
-directory. Districts are redrawn between elections, so each election has its own geometry.
+`download-districts` takes an election id (see `scripts/elections.ts` for the known ids)
+and an output directory; `transform-geojson` takes an input and an output directory.
+Districts are redrawn between elections, so each election has its own geometry — keep them
+in separate directories.
 
 ```shell
 # Download the raw archives (EPSG:3006) for one election

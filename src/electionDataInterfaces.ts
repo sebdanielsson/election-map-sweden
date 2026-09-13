@@ -8,11 +8,12 @@ export interface PartiUppslag {
 export interface Rostfordelning {
   partier?: Record<string, PartiUppslag>;
   valtillfalle: string | null;
-  valklass: string | null;
+  /* Dropped by trimResults; present only in files taken straight from Valmyndigheten. */
+  valklass?: string | null;
   rakningstillfalle: string | null;
   valtyp: string | null;
   senasteUppdateringstid: string | null;
-  antalUppdateringar: number | null;
+  antalUppdateringar?: number | null;
   antalValdistriktRaknade: number | null;
   antalValdistriktSomSkaRaknas: number | null;
   valdistrikt: Valdistrikt[];
@@ -158,13 +159,17 @@ export interface OvrigaOgiltiga {
   forandringAndelRosterAvTotaltAntalRoster: number | null;
 }
 
+/* Optional members are the ones scripts/trimResults.ts drops. The app reads a trimmed file
+ * for one election and an untrimmed one for another, so declaring them required made the
+ * type describe neither: a cast through fetch().json() would have promised values that are
+ * undefined at run time. Only partikod, partiforkortning and andelRoster are always there. */
 export interface PartiRoster {
-  partibeteckning: string | null;
+  partibeteckning?: string | null;
   partiforkortning: string | null;
   partikod: string | null;
-  fargkod: string | null;
-  ordningsnummer: number | null;
-  antalRoster: number | null;
+  fargkod?: string | null;
+  ordningsnummer?: number | null;
+  antalRoster?: number | null;
   andelRoster: number | null;
   deltaMandatfordelning: string | null;
   antalRosterForegaendeVal: number | null;
