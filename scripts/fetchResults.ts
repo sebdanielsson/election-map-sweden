@@ -48,7 +48,11 @@ if (!outputDir) {
   process.exit(1);
 }
 
-const die = (message: string): never => {
+/* Annotated on the binding, not just the arrow, so TypeScript narrows through a call to it:
+ * control-flow analysis only treats a call as terminating when the *variable* carries an
+ * explicit never-returning type. Without it, `if (!x) die(...)` left `x` possibly undefined on
+ * the line after. scripts/trimResults.ts declares its `fail` the same way. */
+const die: (message: string) => never = (message) => {
   console.error(`FAILED: ${message}`);
   process.exit(1);
 };
@@ -172,11 +176,51 @@ const main = async () => {
 
   const base = INDEX_URL.replace(/index\.md5$/, "");
 
-  for (const { md5, href } of wanted) {
-    const archive = await get(`${base}${href}`);
+  /* Valmyndigheten republishes these archives every few minutes while counting, and the index
+   * is read before any archive is downloaded. A republish inside that window leaves the index
+   * describing the previous archive, so the download is intact and simply newer than what we
+   * were told to expect — a race, not corruption. It killed two runs tonight on its own
+   * (19:09 and 20:24 UTC), each costing a five-minute publishing cycle for data that was
+   * perfectly good, and it gets likelier as counting speeds up and republishes come closer
+   * together.
+   *
+   * Re-reading the index and downloading again resolves it, because the second read describes
+   * the archive now being served. This weakens nothing: an archive is still only accepted when
+   * it matches a hash read from the index, and the detached RSA signature on every JSON inside
+   * it — which is the actual integrity control here, the index hash being only a
+   * did-the-download-complete check — is verified below either way. A mismatch that persists,
+   * which is what corruption or tampering looks like, still fails the run. */
+  const downloadAttempts = 3;
+  const fetchVerified = async (href: string, expected: string): Promise<Buffer> => {
+    let md5 = expected;
+    for (let attempt = 1; attempt <= downloadAttempts; attempt += 1) {
+      const archive = await get(`${base}${href}`);
+      const actual = crypto.createHash("md5").update(archive).digest("hex");
+      if (actual === md5) return archive;
+      if (attempt === downloadAttempts) {
+        die(
+          `${href}: MD5 mismatch after ${String(downloadAttempts)} attempts — index says ${md5}, download is ${actual}`,
+        );
+      }
+      console.warn(
+        `${href}: MD5 mismatch (index ${md5}, download ${actual}) — re-reading the index and retrying`,
+      );
+      /* A moment before re-reading: a publisher part-way through replacing the pair would
+       * otherwise be re-read just as inconsistently, and burn an attempt doing it. */
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const fresh = parseIndex((await get(INDEX_URL)).toString("utf8")).find(
+        (entry) => entry.href === href,
+      );
+      if (!fresh) die(`${href}: listed in the index and gone from it one read later`);
+      md5 = fresh.md5;
+    }
+    /* Unreachable — the loop returns or dies — but the compiler cannot see that through
+     * die()'s process.exit(). */
+    return die(`${href}: download loop ended without a verdict`);
+  };
 
-    const actual = crypto.createHash("md5").update(archive).digest("hex");
-    if (actual !== md5) die(`${href}: MD5 mismatch — index says ${md5}, download is ${actual}`);
+  for (const { md5, href } of wanted) {
+    const archive = await fetchVerified(href, md5);
 
     const unpacked = path.join(workDir, path.basename(href, ".zip"));
     fs.mkdirSync(unpacked, { recursive: true });
