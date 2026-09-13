@@ -3,13 +3,23 @@ import * as path from "node:path";
 import proj4 from "proj4";
 import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
+/* Six decimal places is about 0.1 m — far finer than a valdistrikt boundary drawn at the
+ * zoom levels this app uses, and the raw SWEREF99 values carry ten. Rounding here is the
+ * single biggest lever on payload size: for the 2026 set it takes the transformed output
+ * from 191.8 MB to 41.3 MB (11.3 MB gzipped). Five places (~1 m) would save a further
+ * 2 MB gzipped if that is ever needed. */
+const COORDINATE_DECIMALS = 6;
+
+const round = (n: number): number => Number(n.toFixed(COORDINATE_DECIMALS));
+
 // Define and register the projections
 proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
 proj4.defs("EPSG:4326");
 
 // Transformer
 const transformCoordinate = (coord: [number, number]): [number, number] => {
-  return proj4("EPSG:3006", "EPSG:4326", coord);
+  const [lon, lat] = proj4("EPSG:3006", "EPSG:4326", coord);
+  return [round(lon), round(lat)];
 };
 
 // Recursive function to transform all coordinates in the GeoJSON
@@ -117,7 +127,7 @@ files.forEach((file) => {
   });
 
   // Save the transformed GeoJSON to the output file
-  fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data, null, 2));
+  fs.writeFileSync(outputFilePath, JSON.stringify(geojson_data));
 
   console.log(`Coordinate transformation complete for ${file}. Saved to ${outputFilePath}.`);
 });
