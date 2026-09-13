@@ -189,9 +189,16 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+          # https only. aws signs the request with the access key and secret and sends it to
+          # whatever this names, so an http:// endpoint would put those credentials on the
+          # wire in plaintext. Matching `https?` here accepted exactly that.
+          case "$ENDPOINT" in
+            https://*) ;;
+            *) echo "::error::B2_S3_ENDPOINT must start with https:// (got '${ENDPOINT%%:*}:...')"; exit 1 ;;
+          esac
           # Region comes from the endpoint rather than being hardcoded, so the secret stays
           # the single source of truth: https://s3.us-west-001.backblazeb2.com -> us-west-001
-          AWS_DEFAULT_REGION=$(printf '%s' "$ENDPOINT" | sed -n 's|^https\?://s3\.\([^.]*\)\..*|\1|p')
+          AWS_DEFAULT_REGION=$(printf '%s' "$ENDPOINT" | sed -n 's|^https://s3\.\([^.]*\)\..*|\1|p')
           [ -n "$AWS_DEFAULT_REGION" ] || {
             echo "::error::Could not derive a region from B2_S3_ENDPOINT"
             exit 1
