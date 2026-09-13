@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import type { ErrorEvent as MapboxErrorEvent, GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import type { Feature, FeatureCollection } from "geojson";
 import type {
   Rostfordelning,
@@ -95,6 +95,17 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   return response.json();
 };
 
+/* This lives at module scope on purpose. oxc's React Compiler — enabled by
+ * `react({ compiler: true })` in vite.config.ts — cannot lower an `import()` expression and
+ * silently skips any component containing one, which cost App its memoisation entirely.
+ * Calling out to this keeps the chunk split without putting `import()` inside the component.
+ * Both call sites share it: `import()` is memoised, so the second call resolves immediately. */
+const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
+
+/* Generous on purpose: the map is ready in about 5 s on a throttled 1 Mbps link, so this
+ * only trips on a load that is not going to finish. */
+const MAP_LOAD_DEADLINE_MS = 30_000;
+
 const closeSidebar = () => {
   const sidebar = document.getElementById("sidebar");
   if (sidebar && !sidebar.classList.contains("translate-x-full")) {
@@ -106,37 +117,97 @@ export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
   const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
-  const [map, setMap] = useState<mapboxgl.Map | null>(null);
+  const [map, setMap] = useState<MapboxMap | null>(null);
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-    const newMap = new mapboxgl.Map({
-      container: "map",
-      style: "mapbox://styles/mapbox/standard",
-      center: [16.325556, 62.3875],
-      zoom: 5,
-    });
-
     /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
      * unmount before Mapbox fires `load`. Without this, cleanup removes the map and the
      * handler then puts that disposed instance into state, which the effect below would
-     * happily wire handlers onto. */
+     * happily wire handlers onto. Loading mapbox-gl awaits before the map is constructed, so
+     * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
-    newMap.on("load", () => {
-      if (!cancelled) setMap(newMap);
+    let createdMap: MapboxMap | null = null;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+
+    /* mapbox-gl is ~1.8 MB of JS and ~49 kB of CSS — far more than the rest of the app put
+     * together. Loading it here rather than importing it at the top of this file keeps it out
+     * of the entry chunk, so the map frame, spinner and sidebar paint while it downloads. */
+    const initMap = async () => {
+      const [{ default: mapboxgl }] = await loadMapbox();
+      if (cancelled) return;
+
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+      const newMap = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/standard",
+        center: [16.325556, 62.3875],
+        zoom: 5,
+      });
+      createdMap = newMap;
+
+      /* A request that is opened and never answered — hung proxy, captive portal, a source
+       * whose TileJSON never returns — settles neither `load` nor `error`, so every handler
+       * below stays silent and the spinner would never go away. Mapbox has no request
+       * timeout of its own, so this is the only thing that ends that state. */
+      deadline = setTimeout(() => {
+        if (cancelled) return;
+        console.error(`Map did not finish loading within ${String(MAP_LOAD_DEADLINE_MS)} ms`);
+        setLoadError("Could not load the map. Check your connection and reload the page.");
+      }, MAP_LOAD_DEADLINE_MS);
+
+      /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
+       * long-lived error handler — has not run yet. Mapbox logs such a failure to the console
+       * but nothing reaches the user, so a style that never arrives (expired or invalid token,
+       * 401, offline) just spins forever. */
+      const onPreLoadError = (e: MapboxErrorEvent) => {
+        if (cancelled) return;
+        console.error("Failed to load the map style:", e.error);
+        setLoadError("Could not load the map. Check your connection and reload the page.");
+      };
+      newMap.on("error", onPreLoadError);
+
+      /* Stop listening once the style itself is in. `load` waits for the first complete frame,
+       * so the sprite and glyph requests race it, and one of those 404ing would report a fatal
+       * error over a map that is about to work fine. Nothing is swallowed afterwards: Mapbox
+       * logs unhandled errors itself while no listener is registered, and the data effect
+       * attaches its own. */
+      newMap.once("style.load", () => {
+        newMap.off("error", onPreLoadError);
+      });
+
+      /* Clearing happens here and not on `style.load`, which fires even when the style is
+       * broken — an import that fails is reported and then `style.load` follows in the same
+       * tick (mapbox fires ErrorEvent("Failed to load imports") immediately before it).
+       * Clearing there erased the message for a style that had demonstrably failed, leaving
+       * the spinner up for good. `load` only fires once the map really is usable. */
+      newMap.on("load", () => {
+        clearTimeout(deadline);
+        if (cancelled) return;
+        setLoadError(null);
+        setMap(newMap);
+      });
+    };
+
+    /* A failed chunk fetch would otherwise leave the spinner up forever and surface only as
+     * an unhandledrejection, the same way the data fetches below would. */
+    initMap().catch((err: unknown) => {
+      if (cancelled) return;
+      console.error("Failed to load the map library:", err);
+      setLoadError("Could not load the map. Check your connection and reload the page.");
     });
 
     return () => {
       cancelled = true;
-      newMap.remove();
+      clearTimeout(deadline);
+      createdMap?.remove();
     };
   }, []);
 
   useEffect(() => {
-    /* The work below spans two awaits and then mutates the map and component state. The map
+    /* The work below spans three awaits and then mutates the map and component state. The map
      * init effect's cleanup calls remove() on unmount — and StrictMode runs that in dev on
      * every mount — so without this flag a teardown mid-fetch lands addSource/addLayer and
      * event handlers on a disposed instance. */
@@ -236,7 +307,7 @@ export default function App() {
                 console.error("No properties found for the selected district");
               }
 
-              const highlightSource = map.getSource("highlight-feature") as mapboxgl.GeoJSONSource;
+              const highlightSource = map.getSource("highlight-feature") as GeoJSONSource;
               highlightSource.setData({
                 type: "FeatureCollection",
                 features: [feature as unknown as Feature],
@@ -249,6 +320,12 @@ export default function App() {
             }
           }
         });
+
+        /* Already resolved: this effect only runs once the map exists, so the chunk is in
+         * the module registry. Taken off `default` to match the constructor above —
+         * mapbox-gl ships a UMD bundle, whose named exports exist only via bundler interop. */
+        const [{ default: mapboxgl }] = await loadMapbox();
+        if (cancelled) return;
 
         const tooltip = new mapboxgl.Popup({
           closeButton: false,
