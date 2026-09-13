@@ -95,12 +95,12 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
   return response.json();
 };
 
-/* Both loaders live at module scope on purpose. oxc's React Compiler — enabled by
+/* This lives at module scope on purpose. oxc's React Compiler — enabled by
  * `react({ compiler: true })` in vite.config.ts — cannot lower an `import()` expression and
  * silently skips any component containing one, which cost App its memoisation entirely.
- * Calling out to these keeps the chunk split without putting `import()` inside the component. */
+ * Calling out to this keeps the chunk split without putting `import()` inside the component.
+ * Both call sites share it: `import()` is memoised, so the second call resolves immediately. */
 const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
-const loadMapboxJs = () => import("mapbox-gl");
 
 const closeSidebar = () => {
   const sidebar = document.getElementById("sidebar");
@@ -122,7 +122,7 @@ export default function App() {
     /* Guard the load handler: StrictMode mounts effects twice in dev, and the component can
      * unmount before Mapbox fires `load`. Without this, cleanup removes the map and the
      * handler then puts that disposed instance into state, which the effect below would
-     * happily wire handlers onto. The dynamic import adds a second await to that window, so
+     * happily wire handlers onto. Loading mapbox-gl awaits before the map is constructed, so
      * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
     let createdMap: MapboxMap | null = null;
@@ -144,30 +144,30 @@ export default function App() {
       createdMap = newMap;
 
       /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
-       * long-lived error handler — has not run yet. Mapbox does log such a failure itself (see
-       * below), but nothing reaches the user: a style that never arrives — expired or invalid
-       * token, 401, offline — just spins forever. Note there is no setLoading(false) here: the
-       * spinner is already hidden whenever loadError is set, and leaving `loading` alone is
-       * what lets it come back if the style turns out to be fine. */
+       * long-lived error handler — has not run yet. Mapbox logs such a failure to the console
+       * but nothing reaches the user, so a style that never arrives (expired or invalid token,
+       * 401, offline) just spins forever. */
       const onPreLoadError = (e: MapboxErrorEvent) => {
         if (cancelled) return;
-        console.error("Failed to load the map style:", e.error ?? e);
+        console.error("Failed to load the map style:", e.error);
         setLoadError("Could not load the map. Check your connection and reload the page.");
       };
       newMap.on("error", onPreLoadError);
 
-      newMap.on("load", () => {
-        if (cancelled) return;
-        /* Hand error reporting back before anything else: Mapbox only logs an unhandled error
-         * itself while no listener is registered, so keeping this one would silently swallow
-         * every map error until the data effect attaches its own — and all of them if that
-         * effect throws first. */
+      /* Hand reporting back as soon as the style itself is in, rather than on `load`. `load`
+       * waits for the first complete frame, so the sprite and glyph requests race it — and one
+       * of those 404ing would flash a fatal overlay over a map that is about to work fine.
+       * Nothing is swallowed afterwards: Mapbox logs unhandled errors itself while no listener
+       * is registered, and the data effect attaches its own. Clearing loadError covers the
+       * case where a pre-style error already reported one; `loading` is untouched, so the
+       * spinner simply resumes until the district data lands. */
+      newMap.once("style.load", () => {
         newMap.off("error", onPreLoadError);
-        /* A sprite or glyph that 404s fires `error` while the style still loads fine, so drop
-         * the overlay that reported it. `loading` is untouched, so the spinner resumes until
-         * the district data lands. */
-        setLoadError(null);
-        setMap(newMap);
+        if (!cancelled) setLoadError(null);
+      });
+
+      newMap.on("load", () => {
+        if (!cancelled) setMap(newMap);
       });
     };
 
@@ -177,7 +177,6 @@ export default function App() {
       if (cancelled) return;
       console.error("Failed to load the map library:", err);
       setLoadError("Could not load the map. Check your connection and reload the page.");
-      setLoading(false);
     });
 
     return () => {
@@ -304,7 +303,7 @@ export default function App() {
         /* Already resolved: this effect only runs once the map exists, so the chunk is in
          * the module registry. Taken off `default` to match the constructor above —
          * mapbox-gl ships a UMD bundle, whose named exports exist only via bundler interop. */
-        const { default: mapboxgl } = await loadMapboxJs();
+        const [{ default: mapboxgl }] = await loadMapbox();
         if (cancelled) return;
 
         const tooltip = new mapboxgl.Popup({
