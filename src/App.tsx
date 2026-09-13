@@ -100,11 +100,11 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
  * silently skips any component containing one, which cost App its memoisation entirely.
  * Calling out to this keeps the chunk split without putting `import()` inside the component.
  * Both call sites share it: `import()` is memoised, so the second call resolves immediately. */
+const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
+
 /* Generous on purpose: the map is ready in about 5 s on a throttled 1 Mbps link, so this
  * only trips on a load that is not going to finish. */
 const MAP_LOAD_DEADLINE_MS = 30_000;
-
-const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
 
 const closeSidebar = () => {
   const sidebar = document.getElementById("sidebar");
