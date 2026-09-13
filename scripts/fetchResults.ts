@@ -194,7 +194,13 @@ const main = async () => {
 
     for (const name of jsonFiles) {
       const jsonPath = path.join(unpacked, name);
-      const signaturePath = path.join(unpacked, `${name.replace(/\.json$/, "")}_sign.sha256`);
+      /* Case-insensitive to match the filter that selected this file. The filter accepted
+       * `.JSON` and this strip did not, so such a file sent us looking for
+       * `NAME.JSON_sign.sha256` instead of `NAME_sign.sha256` and the archive was refused as
+       * unsigned. That fails closed rather than open, but a false refusal on election night
+       * still means no data — and the real archives name signatures `<name minus .json>_sign
+       * .sha256`, so stripping the extension whatever its case is what matches them. */
+      const signaturePath = path.join(unpacked, `${name.replace(/\.json$/i, "")}_sign.sha256`);
 
       if (!fs.existsSync(signaturePath)) {
         die(`${name}: no detached signature alongside it — refusing to publish unverified data`);
