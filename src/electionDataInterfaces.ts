@@ -8,6 +8,11 @@ export interface PartiUppslag {
 export interface Rostfordelning {
   partier?: Record<string, PartiUppslag>;
   valtillfalle: string | null;
+  /* Preserved by trimResults as provenance — which election day a snapshot belongs to.
+   * Optional because no file published so far carries it: absent from both the 2022 and
+   * the 2024 results, so the trimmed output omits it too. Nullable to match the other
+   * provenance fields here rather than assuming upstream will never send an explicit null. */
+  valdatum?: string | null;
   /* Dropped by trimResults; present only in files taken straight from Valmyndigheten. */
   valklass?: string | null;
   rakningstillfalle: string | null;

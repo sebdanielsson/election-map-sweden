@@ -111,6 +111,16 @@ const main = async () => {
    * proves integrity and provenance-as-served, not that Valmyndigheten signed it. It still
    * catches a certificate outside its validity window, which openssl does not check during
    * `dgst -verify`. Pinning the SPKI hash would be the stronger control. */
+  /* Parsed first, expiry second. One combined check reported every failure as an expiry,
+   * so a 503 page or a redirect from the CDN — which openssl rejects with "Could not read
+   * certificate" — sent whoever was on call looking for a renewal that was not the problem.
+   * Both still fail closed; only the diagnosis differs, and on election night that is the
+   * difference between a two-minute fix and a wrong search. */
+  try {
+    execFileSync("openssl", ["x509", "-in", certPath, "-noout"], { stdio: "pipe" });
+  } catch {
+    die(`${CERT_URL} did not return a readable X.509 certificate`);
+  }
   try {
     execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-checkend", "0"], {
       stdio: "pipe",
