@@ -121,6 +121,19 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
+          # The link is written out rather than left to the CLI to infer from environment
+          # variables. Relying on VERCEL_ORG_ID/VERCEL_PROJECT_ID alone failed here with
+          # "Could not retrieve Project Settings", and which variables a given CLI version
+          # honours is not something to guess at from a workflow. This file is exactly what
+          # `vercel link` produces, so the CLI has nothing left to work out.
+          mkdir -p .vercel
+          # printf rather than a heredoc: a heredoc's terminator has to sit at column zero,
+          # which it cannot inside an indented YAML block, and %s keeps the ids out of the
+          # shell's word splitting.
+          printf '{"projectId":"%s","orgId":"%s"}\n' "$VERCEL_PROJECT_ID" "$VERCEL_ORG_ID" \
+            > .vercel/project.json
+          # Shape only — the ids are secrets and are not printed.
+          python3 -c "import json;d=json.load(open('.vercel/project.json'));print('link written, keys:', sorted(d))"
           vercel pull --yes \
             --environment="${{ steps.target.outputs.environment }}" \
             --token="$VERCEL_TOKEN"
