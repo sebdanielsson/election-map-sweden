@@ -56,6 +56,27 @@ if (!inputFile || !outputFile) {
   process.exit(1);
 }
 
+/* The input interfaces are casts over parsed JSON, so they promise nothing at runtime. These
+ * two numbers reach the app unguarded: it filters and compares them (`andelRoster >= cutoff`),
+ * sums them (`sum + andelRoster`) and formats them (`andelRoster?.toFixed(2)`). A string
+ * survives the comparison, turns the sum into concatenation, and then throws on `.toFixed` —
+ * a district click that crashes the sidebar. Everything else here fails closed on schema
+ * drift; these did not.
+ *
+ * null is allowed: the app tests `andelRoster !== null` explicitly, and an uncounted district
+ * legitimately has no share yet. Only a non-null, non-finite value is refused, which covers
+ * strings, NaN and Infinity. Checked against the real 2022 riksdag file first — 52,624 party
+ * rows and 6,578 other-party buckets, every value a number — so this rejects no good data. */
+const numberOrNull = (value: unknown, where: string): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    fail(
+      `${where} is ${typeof value === "number" ? String(value) : typeof value}, expected a finite number or null`,
+    );
+  }
+  return value;
+};
+
 const fail: (message: string) => never = (message) => {
   console.error(`${path.basename(inputFile)}: ${message}`);
   process.exit(1);
@@ -182,14 +203,23 @@ const trimmed = {
           partiRoster: parties.map((party) => ({
             partikod: party.partikod ?? null,
             partiforkortning: party.partiforkortning ?? null,
-            andelRoster: party.andelRoster ?? null,
+            andelRoster: numberOrNull(
+              party.andelRoster,
+              `district ${district.valdistriktskod ?? "(no code)"} party ${party.partikod ?? "(no code)"} andelRoster`,
+            ),
           })),
           /* Votes for parties below the reporting threshold are their own bucket, not part
            * of partiRoster. Dropping it would make any "other parties" total computed from
            * partiRoster alone understate the real figure. */
           rosterOvrigaPartier: {
-            antalRoster: paverkaMandat?.rosterOvrigaPartier?.antalRoster ?? null,
-            andelRoster: paverkaMandat?.rosterOvrigaPartier?.andelRoster ?? null,
+            antalRoster: numberOrNull(
+              paverkaMandat?.rosterOvrigaPartier?.antalRoster,
+              `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.antalRoster`,
+            ),
+            andelRoster: numberOrNull(
+              paverkaMandat?.rosterOvrigaPartier?.andelRoster,
+              `district ${district.valdistriktskod ?? "(no code)"} rosterOvrigaPartier.andelRoster`,
+            ),
           },
         },
       },

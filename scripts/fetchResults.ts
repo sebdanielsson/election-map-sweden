@@ -110,6 +110,15 @@ const main = async () => {
   /* Separate from workDir: the public key used to verify signatures must not sit anywhere
    * an extracted archive could reach, whatever unzip does with a hostile entry name. */
   const keyDir = fs.mkdtempSync(path.join(os.tmpdir(), "valkeys-"));
+  /* Registered, not deferred to the end of main(). Every verification failure goes through
+   * die(), which is process.exit(), so a try/finally would be skipped — and on election
+   * night this polls every five minutes, so each rejected poll used to leave an archive
+   * tree and a key directory behind in /tmp. An exit handler runs on the die() paths, the
+   * success path and an uncaught throw alike. */
+  process.on("exit", () => {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    fs.rmSync(keyDir, { recursive: true, force: true });
+  });
   fs.mkdirSync(stagingDir, { recursive: true });
   const certPath = path.join(keyDir, "val-sign-crt.pem");
   fs.writeFileSync(certPath, cert);
@@ -227,8 +236,6 @@ const main = async () => {
     fs.copyFileSync(path.join(stagingDir, name), path.join(finalStaging, name));
   }
   commitDir(finalStaging, outputDir);
-  fs.rmSync(workDir, { recursive: true, force: true });
-  fs.rmSync(keyDir, { recursive: true, force: true });
   console.log(`\nVerified files written to ${outputDir}`);
 };
 
