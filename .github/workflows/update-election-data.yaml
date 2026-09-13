@@ -28,10 +28,15 @@ permissions:
 
 on:
   schedule:
-    # GitHub enforces a five-minute floor and delays scheduled runs under load, so treat
-    # this as "within about ten minutes of publication", not as real time. The window
-    # guard below stops this from running every five minutes forever.
-    - cron: "*/5 * * * *"
+    # Hourly. The five-minute cadence existed for election night, when the counters moved
+    # every few minutes and the map was worth refreshing that often; past that evening it
+    # is a poll a minute for figures that barely change, and each one downloads and
+    # verifies the whole archive.
+    #
+    # GitHub delays scheduled runs under load, so treat this as "within an hour or so of
+    # publication", not as real time. The window guard below is what eventually stops it
+    # running at all.
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       select:
