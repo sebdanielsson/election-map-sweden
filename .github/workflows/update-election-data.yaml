@@ -159,6 +159,23 @@ jobs:
               exit 1
             }
           done
+          # "One of each" is not the invariant. The default selector takes both countings, so
+          # a preliminary rostfordelning beside a final mandatfordelning satisfies the loop
+          # above while leaving the app combining two different snapshots — the exact thing
+          # the "Both or neither" note claims to prevent. Pair them by name instead: the two
+          # files of a snapshot differ only in that one token.
+          for f in publish/*rostfordelning*.json; do
+            [ -f "${f/rostfordelning/mandatfordelning}" ] || {
+              echo "::error::$(basename "$f") has no matching mandatfordelning — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
+          for f in publish/*mandatfordelning*.json; do
+            [ -f "${f/mandatfordelning/rostfordelning}" ] || {
+              echo "::error::$(basename "$f") has no matching rostfordelning — refusing to publish half a snapshot"
+              exit 1
+            }
+          done
           ls -la publish
 
       # Gzipped at rest with Content-Encoding set, because B2 does not compress on the fly:
@@ -199,9 +216,12 @@ jobs:
           # Requiring https:// was not enough: https://s3.us-west-001.attacker.example passed
           # that check and derived a clean region, which would have shipped the bucket
           # credentials to it.
+          # No part of the value is echoed, here or below. Actions masks occurrences of the
+          # exact secret string, so printing a *substring* — a host with userinfo, say
+          # `user:password@...` — defeats the masking and puts it in the log in clear text.
           case "$ENDPOINT" in
             https://*) ;;
-            *) echo "::error::B2_S3_ENDPOINT must start with https:// (got '${ENDPOINT%%:*}:...')"; exit 1 ;;
+            *) echo "::error::B2_S3_ENDPOINT must start with https://"; exit 1 ;;
           esac
           # Everything between the scheme and the first "/" is the host, so userinfo, a port
           # or a query string stay attached and fail the match below instead of being trimmed
@@ -210,7 +230,7 @@ jobs:
           host=${host%%/*}
           case "$host" in
             s3.*.backblazeb2.com) ;;
-            *) echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host, got '$host'"; exit 1 ;;
+            *) echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host"; exit 1 ;;
           esac
           # Region comes from the endpoint rather than being hardcoded, so the secret stays
           # the single source of truth: https://s3.us-west-001.backblazeb2.com -> us-west-001
@@ -218,7 +238,7 @@ jobs:
           AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION%.backblazeb2.com}
           case "$AWS_DEFAULT_REGION" in
             "" | *.*)
-              echo "::error::Could not derive a single region label from B2_S3_ENDPOINT ('$host')"
+              echo "::error::Could not derive a single region label from B2_S3_ENDPOINT"
               exit 1
               ;;
           esac

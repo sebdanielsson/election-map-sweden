@@ -111,12 +111,18 @@ const downloadAndExtract = async (url: string) => {
    * nested in a subdirectory — otherwise left twenty counties transforming happily and the
    * run green, with one county simply absent from the map. transformGeojson only objects
    * when *no* files exist at all, so nothing downstream would have noticed either. */
-  if (extracted.length === 0) {
+  /* Exactly one, not "at least one". Every configured archive is a single county, and all
+   * of them extract into one shared staging directory — so an archive carrying two GeoJSONs
+   * can pad the total enough to hide a basename collision that silently overwrote another
+   * county's file, leaving the aggregate count right and a county's data wrong. With this,
+   * 21 archives must produce 21 writes, and any collision shows up as a short count. */
+  if (extracted.length !== 1) {
     throw new Error(
-      `archive contains no GeoJSON; entries: ${directory.files
-        .map((e) => e.path)
-        .slice(0, 10)
-        .join(", ")}`,
+      `archive contains ${String(extracted.length)} top-level GeoJSON files, expected exactly 1; ` +
+        `entries: ${directory.files
+          .map((e) => e.path)
+          .slice(0, 10)
+          .join(", ")}`,
     );
   }
 };
