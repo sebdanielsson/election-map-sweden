@@ -189,20 +189,34 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          # https only. aws signs the request with the access key and secret and sends it to
-          # whatever this names, so an http:// endpoint would put those credentials on the
-          # wire in plaintext. Matching `https?` here accepted exactly that.
+          # aws signs every request with the access key and secret and sends it wherever this
+          # names, so the endpoint is validated as a whole rather than by scheme alone.
+          # Requiring https:// was not enough: https://s3.us-west-001.attacker.example passed
+          # that check and derived a clean region, which would have shipped the bucket
+          # credentials to it.
           case "$ENDPOINT" in
             https://*) ;;
             *) echo "::error::B2_S3_ENDPOINT must start with https:// (got '${ENDPOINT%%:*}:...')"; exit 1 ;;
           esac
+          # Everything between the scheme and the first "/" is the host, so userinfo, a port
+          # or a query string stay attached and fail the match below instead of being trimmed
+          # away and ignored.
+          host=${ENDPOINT#https://}
+          host=${host%%/*}
+          case "$host" in
+            s3.*.backblazeb2.com) ;;
+            *) echo "::error::B2_S3_ENDPOINT must be an s3.<region>.backblazeb2.com host, got '$host'"; exit 1 ;;
+          esac
           # Region comes from the endpoint rather than being hardcoded, so the secret stays
           # the single source of truth: https://s3.us-west-001.backblazeb2.com -> us-west-001
-          AWS_DEFAULT_REGION=$(printf '%s' "$ENDPOINT" | sed -n 's|^https://s3\.\([^.]*\)\..*|\1|p')
-          [ -n "$AWS_DEFAULT_REGION" ] || {
-            echo "::error::Could not derive a region from B2_S3_ENDPOINT"
-            exit 1
-          }
+          AWS_DEFAULT_REGION=${host#s3.}
+          AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION%.backblazeb2.com}
+          case "$AWS_DEFAULT_REGION" in
+            "" | *.*)
+              echo "::error::Could not derive a single region label from B2_S3_ENDPOINT ('$host')"
+              exit 1
+              ;;
+          esac
           export AWS_DEFAULT_REGION
           echo "Region: $AWS_DEFAULT_REGION"
           # mandatfordelning first, then rostfordelning. This does NOT make the pair atomic:
