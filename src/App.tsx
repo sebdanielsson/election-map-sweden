@@ -5,6 +5,7 @@ import type {
   Rostfordelning,
   Mandatfordelning,
   PartiRoster,
+  PartiUppslag,
   /*   Valdistrikt,
     RosterPaverkaMandat,
     ListRoster,
@@ -14,15 +15,28 @@ import type {
   VotingDistrictProperties,
 } from "./electionDataInterfaces";
 
+/* `rosterOvrigaPartier` is a separate bucket from partiRoster — votes for parties below the
+ * reporting threshold — so the two have to travel together or any "other parties" total
+ * computed from partiRoster alone understates the real figure. It is 0 in every district of
+ * EU-val 2024, but municipal elections carry many small local parties. */
+export interface DistrictResults {
+  parties: PartiRoster[];
+  ovrigaShare: number | null;
+}
+
 const getDistrictResults = (
   rostfordelningData: Rostfordelning,
   districtId: string | null,
-): PartiRoster[] | null => {
+): DistrictResults | null => {
   if (!districtId) return null;
 
   const districtData = rostfordelningData.valdistrikt.find((d) => d.valdistriktskod === districtId);
   if (!districtData) return null;
-  return districtData.rostfordelning.rosterPaverkaMandat.partiRoster;
+  const paverkaMandat = districtData.rostfordelning.rosterPaverkaMandat;
+  return {
+    parties: paverkaMandat.partiRoster,
+    ovrigaShare: paverkaMandat.rosterOvrigaPartier.andelRoster,
+  };
 };
 
 // Public election data hosted on Backblaze B2 (bucket: election-map-sweden)
@@ -115,7 +129,13 @@ const closeSidebar = () => {
 
 export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<null | VotingDistrictProperties>(null);
-  const [districtResults, setDistrictResults] = useState<null | PartiRoster[]>(null);
+  const [districtResults, setDistrictResults] = useState<null | DistrictResults>(null);
+  /* Both come from the result files rather than being assumed: the threshold that separates
+   * reported parties from "Others" is per election area (4% for riksdag and EU, different
+   * for kommun and region), and the name lookup covers parties whose partiforkortning is
+   * blank — 64 of the 100 parties in the 2024 file have one. */
+  const [threshold, setThreshold] = useState<number | null>(null);
+  const [partyNames, setPartyNames] = useState<null | Record<string, PartiUppslag>>(null);
   const [nationalResults, setNationalResults] = useState<null | PartiRoster[]>(null);
   const [map, setMap] = useState<MapboxMap | null>(null);
   // Only the setter is used; the parsed data is passed straight into getDistrictResults().
@@ -284,6 +304,8 @@ export default function App() {
         setNationalResults(
           fetchedNationalResultsData.valomrade.rostfordelning.rosterPaverkaMandat.partiRoster,
         );
+        setThreshold(fetchedNationalResultsData.valomrade.valomradessparrProcent);
+        setPartyNames(fetchedRostfordelningData.partier ?? null);
         setLoading(false);
 
         map.on("click", (e) => {
@@ -379,16 +401,35 @@ export default function App() {
     };
   }, [map]);
 
+  /* The abbreviation is what the table shows, but it is blank for most registered parties —
+   * 64 of the 100 in the 2024 file. Fall back to the registered name, then to the code, so a
+   * row can never render empty. */
+  const partyLabel = (party: PartiRoster): string => {
+    const abbreviation = party.partiforkortning?.trim();
+    if (abbreviation) return abbreviation;
+    const registered = party.partikod
+      ? partyNames?.[party.partikod]?.partibeteckning?.trim()
+      : null;
+    return registered || party.partibeteckning?.trim() || party.partikod || "—";
+  };
+
   const renderDistrictResults = (
-    results: PartiRoster[] | null,
+    results: DistrictResults | null,
     nationalResults: PartiRoster[] | null,
   ) => {
     if (!results) return null;
 
-    const others = results.filter((p) => p.andelRoster !== null && p.andelRoster < 4);
-    const majorParties = results.filter((p) => p.andelRoster !== null && p.andelRoster >= 4);
+    /* Valmyndigheten publishes the threshold per election area (valomradessparrProcent).
+     * Hardcoding 4 is right for riksdag and EU but wrong for kommun and region, so fall back
+     * to it only when the file does not say. */
+    const cutoff = threshold ?? 4;
+    const reported = results.parties.filter((p) => p.andelRoster !== null);
+    const others = reported.filter((p) => (p.andelRoster ?? 0) < cutoff);
+    const majorParties = reported.filter((p) => (p.andelRoster ?? 0) >= cutoff);
 
-    const othersTotal = others.reduce((sum, party) => sum + (party.andelRoster || 0), 0);
+    /* Parties below the threshold plus the parties that are not itemised at all. */
+    const othersTotal =
+      others.reduce((sum, party) => sum + (party.andelRoster ?? 0), 0) + (results.ovrigaShare ?? 0);
 
     const getNationalResult = (partikod: string) => {
       if (!nationalResults) return null;
@@ -409,13 +450,13 @@ export default function App() {
             const nationalRes = party.partikod ? getNationalResult(party.partikod) : null;
             return (
               <tr key={party.partikod}>
-                <td>{party.partiforkortning}</td>
+                <td>{partyLabel(party)}</td>
                 <td>{party.andelRoster?.toFixed(2)}</td>
                 <td>{nationalRes != null ? nationalRes.toFixed(2) : "N/A"}</td>
               </tr>
             );
           })}
-          {others.length > 0 && (
+          {othersTotal > 0 && (
             <tr>
               <td>Others</td>
               <td>{othersTotal.toFixed(2)}</td>

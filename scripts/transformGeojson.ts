@@ -3,12 +3,11 @@ import * as path from "node:path";
 import proj4 from "proj4";
 import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
-/* Six decimal places is about 0.1 m — far finer than a valdistrikt boundary drawn at the
- * zoom levels this app uses, and the raw SWEREF99 values carry ten. Rounding here is the
- * single biggest lever on payload size: for the 2026 set it takes the transformed output
- * from 191.8 MB to 41.3 MB (11.3 MB gzipped). Five places (~1 m) would save a further
- * 2 MB gzipped if that is ever needed. */
-const COORDINATE_DECIMALS = 6;
+/* Five decimal places is about 1 m at this latitude — well under the width of the thinnest
+ * line the map draws, and the raw SWEREF99 values carry ten. Rounding is the single biggest
+ * lever on payload size: for the 2026 set it takes the transformed output from 191.8 MB to
+ * 37.6 MB, 9.2 MB gzipped. */
+const COORDINATE_DECIMALS = 5;
 
 const round = (n: number): number => Number(n.toFixed(COORDINATE_DECIMALS));
 

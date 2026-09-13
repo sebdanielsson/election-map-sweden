@@ -1,4 +1,12 @@
+/* Emitted by scripts/trimResults.ts, keyed by partikod. Optional because files published
+ * before that script existed do not carry it. */
+export interface PartiUppslag {
+  partiforkortning: string | null;
+  partibeteckning: string | null;
+}
+
 export interface Rostfordelning {
+  partier?: Record<string, PartiUppslag>;
   valtillfalle: string | null;
   valklass: string | null;
   rakningstillfalle: string | null;
