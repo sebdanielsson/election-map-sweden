@@ -2,45 +2,31 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import axios from "axios";
 import * as unzipper from "unzipper";
+import { electionIds, getElection } from "./elections.ts";
 
-const districtsUrls = [
-  "https://www.val.se/download/18.5acd32d818deefef85cfbe/1710431898533/valdistrikt-blekinge-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfc0/1710431917792/valdistrikt-dalarnas-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfc2/1710431935757/valdistrikt-gavleborgs-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfc4/1710431950738/valdistrikt-gotlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfc6/1710431966012/valdistrikt-hallands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfc8/1710431981447/valdistrikt-jamtlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfca/1710431995574/valdistrikt-jonkopings-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfcc/1710432008974/valdistrikt-kalmar-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfce/1710432023047/valdistrikt-kronobergs-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfd0/1710432038927/valdistrikt-norrbottens-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfd2/1710432058310/valdistrikt-skane-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfd4/1710946075746/valdistrikt-sodermanlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfd6/1710432087226/valdistrikt-stockholms-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfd8/1710432103944/valdistrikt-uppsala-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfda/1710432118710/valdistrikt-varmlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfdc/1710432134273/valdistrikt-vasterbottens-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfde/1710432151134/valdistrikt-vasternorrlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfe0/1710432166106/valdistrikt-vastmanlands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfe2/1710432182831/valdistrikt-vastra-gotalands-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfe4/1710432198776/valdistrikt-orebro-lan-eu-val.zip",
-  "https://www.val.se/download/18.5acd32d818deefef85cfe6/1710432226966/valdistrikt-ostergotlands-lan-eu-val.zip",
-];
-
-// First user-provided argument should be the output directory
-const outputDir = process.argv[2];
+// Usage: downloadDistricts.ts <election-id> <output-dir>
+const [, , electionId, outputDir] = process.argv;
 
 if (!outputDir) {
-  console.error("Please provide an output directory.");
+  console.error(
+    `Usage: downloadDistricts.ts <election-id> <output-dir>\n` +
+      `Known election ids: ${electionIds().join(", ")}`,
+  );
   process.exit(1);
 }
+
+const election = getElection(electionId);
+const districtsUrls = election.districtUrls;
 
 // Check if output directory exists
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
-const geoJsonFilesIn = (dir: string) => fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+/* 2024's archives contain .json, 2026's contain .geojson. Matching only one silently
+ * reports "0 files extracted" for the other, so accept both. */
+const geoJsonFilesIn = (dir: string) =>
+  fs.readdirSync(dir).filter((f) => f.endsWith(".json") || f.endsWith(".geojson"));
 
 const downloadAndExtract = async (url: string) => {
   const zipFile = path.join(outputDir, path.basename(url));
@@ -82,6 +68,7 @@ const downloadAndExtract = async (url: string) => {
  * remember what failed: a CLI that logs an error and still exits 0 is invisible to
  * whatever called it. */
 const downloadAllDistricts = async () => {
+  console.log(`Downloading ${districtsUrls.length} district archives for ${election.label}`);
   const failed: string[] = [];
   for (const url of districtsUrls) {
     try {
