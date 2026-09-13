@@ -84,7 +84,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/vercel-cli"
           cd "$RUNNER_TEMP/vercel-cli"
           pnpm init >/dev/null
-          pnpm add vercel@48.2.11
+          pnpm add vercel@59.16.0
           echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Environment is decided once and reused, so the pull, the build and the deploy cannot
