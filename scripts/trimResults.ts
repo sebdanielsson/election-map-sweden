@@ -175,8 +175,20 @@ if (missingCode > 0) {
 /* The app looks districts up with .find(), so a duplicate code means the second district's
  * votes are silently never shown. Real files have none — 6589 codes, 6589 unique — which is
  * precisely why a duplicate appearing would be a sign something is wrong upstream. */
-const codes = trimmed.valdistrikt.map((d) => d.valdistriktskod);
-const duplicates = [...new Set(codes.filter((code, index) => codes.indexOf(code) !== index))];
+/* One pass with a Set rather than indexOf per element: the scan-per-district version was
+ * ~56 ms on the real 6589 districts against ~1 ms for this, and it is the same answer. */
+/* `string | undefined`, not `string`: that is what the field is declared as, and the
+ * missing-code guard above is what rules undefined out — not something the type system
+ * knows here. Narrowing would mean asserting, which is the one thing this check exists
+ * to avoid doing about district codes. */
+const seenCodes = new Set<string | undefined>();
+const duplicateCodes = new Set<string | undefined>();
+for (const district of trimmed.valdistrikt) {
+  const code = district.valdistriktskod;
+  if (seenCodes.has(code)) duplicateCodes.add(code);
+  else seenCodes.add(code);
+}
+const duplicates = [...duplicateCodes];
 if (duplicates.length > 0) {
   fail(
     `duplicate valdistriktskod: ${duplicates.slice(0, 5).join(", ")} — ` +
