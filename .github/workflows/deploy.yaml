@@ -47,19 +47,13 @@ jobs:
       # Only for the preview-URL comment below.
       pull-requests: write
     steps:
-      - name: Fail early if the Vercel credentials are missing
+      - name: Fail early if the Vercel token is missing
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          missing=""
-          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
-            [ -z "${!name}" ] && missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repository secrets:$missing — see .github/workflows/deploy.yaml"
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Missing repository secret VERCEL_TOKEN — see .github/workflows/deploy.yaml"
             exit 1
           fi
 
@@ -119,32 +113,43 @@ jobs:
       - name: Pull Vercel project settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          # The link is written out rather than left to the CLI to infer from environment
-          # variables. Relying on VERCEL_ORG_ID/VERCEL_PROJECT_ID alone failed here with
-          # "Could not retrieve Project Settings", and which variables a given CLI version
-          # honours is not something to guess at from a workflow. This file is exactly what
-          # `vercel link` produces, so the CLI has nothing left to work out.
+          # The link is written out rather than left to the CLI to infer. This file is exactly
+          # what `vercel link` produces, so the CLI has nothing left to work out.
+          #
+          # The ids are written here rather than read from repository secrets, and that is the
+          # fix for the failure this step kept hitting. Every run against main failed with
+          # "Could not retrieve Project Settings" while the link file itself was written
+          # correctly (`keys: ['orgId', 'projectId']`), which pointed at the *values*. The
+          # Vercel API says this project's accountId is `team_Yzf9FpUdob55p7CTM5jPa1cq` — a
+          # team id — and a personal account's *user* id, which is what was available to hand
+          # when the secret was set, cannot address it. The CLI reports that as the same
+          # "could not retrieve" message it uses for a token with no access, so there was
+          # nothing in the log to tell the two apart.
+          #
+          # These are identifiers, not credentials: the team slug is in every preview URL and
+          # the project id is visible to anyone who can open the project. VERCEL_TOKEN stays
+          # the only secret, and is the only thing that grants access. Keeping the ids in the
+          # repository also means a change to them is a commit with a reason attached rather
+          # than a silent edit in the settings UI.
+          ORG_ID=team_Yzf9FpUdob55p7CTM5jPa1cq
+          PROJECT_ID=prj_1sUOb8E5OZ8CREE4wCY1FxbGMgTx
           mkdir -p .vercel
           # printf rather than a heredoc: a heredoc's terminator has to sit at column zero,
-          # which it cannot inside an indented YAML block, and %s keeps the ids out of the
-          # shell's word splitting.
-          printf '{"projectId":"%s","orgId":"%s"}\n' "$VERCEL_PROJECT_ID" "$VERCEL_ORG_ID" \
+          # which it cannot inside an indented YAML block.
+          printf '{"projectId":"%s","orgId":"%s"}\n' "$PROJECT_ID" "$ORG_ID" \
             > .vercel/project.json
-          # Shape only — the ids are secrets and are not printed.
-          python3 -c "import json;d=json.load(open('.vercel/project.json'));print('link written, keys:', sorted(d))"
+          # --scope names the team the project lives under. Redundant now that orgId is right,
+          # but it makes the target explicit and costs nothing.
           vercel pull --yes \
             --environment="${{ steps.target.outputs.environment }}" \
+            --scope=sebastian-danielssons-projects \
             --token="$VERCEL_TOKEN"
 
       - name: Build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           # The build runs `dotenvx run -f .env.production -- vite build`, which needs the
           # matching private key to decrypt VITE_MAPBOX_ACCESS_TOKEN. `vercel pull` brings it
           # down when it is set as a Vercel environment variable, which is how the current
@@ -178,8 +183,6 @@ jobs:
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
           url=$(vercel deploy --prebuilt ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
