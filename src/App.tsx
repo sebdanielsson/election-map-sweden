@@ -631,29 +631,42 @@ export default function App() {
    * browser cache rather than the whole map again.
    *
    * Boundaries are not probed: nothing is loaded when they are missing, so re-running the
-   * effect costs two rounds of 404s and there is nothing cheaper to check first. */
+   * effect costs two rounds of 404s and there is nothing cheaper to check first.
+   *
+   * Every firing counts as an attempt, on both branches and whatever the outcome. The cap is
+   * the only thing that stops this, and `notPublished` is a fresh object on each pass of the
+   * data effect, so a branch that re-runs that effect without counting reschedules itself
+   * forever — once a minute for as long as the tab is open, under an overlay still promising
+   * the checks stop after an hour. Counting costs nothing once the data loads: the effect
+   * clears `notPublished` and this stops on its own. */
   useEffect(() => {
     if (!notPublished) return;
     if (retryAttempts >= RETRY_LIMIT) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       if (notPublished.resource === "boundaries") {
+        setRetryAttempts((attempts) => attempts + 1);
         setRetryTick((tick) => tick + 1);
         return;
       }
       void (async () => {
-        let ready = false;
+        let rerun: boolean;
         try {
           await fetchResults(election);
-          ready = true;
-        } catch {
-          /* Still absent, still torn, or briefly unreachable — all of them mean "not yet",
-           * and the data effect is what reports whichever it turns out to be. */
-          ready = false;
+          /* Results are there now, so the expensive rebuild is worth doing. */
+          rerun = true;
+        } catch (err) {
+          /* Only "not ready" is a reason to go on waiting quietly. A 500, a dropped
+           * connection or a file that cannot state its own provenance is a fault, not a
+           * wait — and the data effect is the one place that classifies a failure and puts a
+           * message on screen. Re-run it so it can. Swallowing these instead left the "no
+           * results published" overlay up through an outage and, an hour later, told the
+           * reader to reload a page whose problem a reload would not fix. */
+          rerun = !(err instanceof DataNotReadyError);
         }
         if (cancelled) return;
-        if (ready) setRetryTick((tick) => tick + 1);
-        else setRetryAttempts((attempts) => attempts + 1);
+        setRetryAttempts((attempts) => attempts + 1);
+        if (rerun) setRetryTick((tick) => tick + 1);
       })();
     }, RETRY_INTERVAL_MS);
     return () => {
