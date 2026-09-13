@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import proj4 from "proj4";
-import { commitDir, stagingPathFor } from "./publishDir.ts";
+import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
 import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
 /* Five decimal places is about 1 m at this latitude — well under the width of the thinnest
@@ -103,6 +103,10 @@ if (!fs.existsSync(inputDir)) {
   process.exit(1);
 }
 
+/* Before the directory is created, for the same reason as in fetchResults: creating the
+ * target first makes an interrupted earlier swap look like nothing to repair, and the
+ * commitDir at the end of this script then discards the good previous set as stale. */
+recoverInterrupted(outputDir);
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }

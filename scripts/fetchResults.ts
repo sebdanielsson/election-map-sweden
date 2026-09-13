@@ -22,7 +22,7 @@
 import { execFileSync } from "node:child_process";
 import * as unzipper from "unzipper";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
-import { commitDir, stagingPathFor } from "./publishDir.ts";
+import { commitDir, recoverInterrupted, stagingPathFor } from "./publishDir.ts";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -72,6 +72,12 @@ const main = async () => {
    * able to tell "nothing published yet" (empty directory) from "the run died" (no
    * directory). `find` on a missing directory exits 1, which under `set -euo pipefail`
    * killed the workflow step on every run before the polls closed. */
+  /* Recovery has to run before that mkdir, not after. `recoverInterrupted` keys off the
+   * target being absent, so creating it first convinces it there is nothing to repair —
+   * and the next commitDir then deletes the previous snapshot as stale. Verified: without
+   * this line an interrupted run's data was stranded on the empty-index path and destroyed
+   * on the publish path, which is precisely the failure the staging was added to prevent. */
+  recoverInterrupted(outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
   const indexBody = (await get(INDEX_URL)).toString("utf8");
