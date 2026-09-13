@@ -100,6 +100,10 @@ const fetchRostfordelningData = async (): Promise<Rostfordelning> => {
  * silently skips any component containing one, which cost App its memoisation entirely.
  * Calling out to this keeps the chunk split without putting `import()` inside the component.
  * Both call sites share it: `import()` is memoised, so the second call resolves immediately. */
+/* Generous on purpose: the map is ready in about 5 s on a throttled 1 Mbps link, so this
+ * only trips on a load that is not going to finish. */
+const MAP_LOAD_DEADLINE_MS = 30_000;
+
 const loadMapbox = () => Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")]);
 
 const closeSidebar = () => {
@@ -126,6 +130,7 @@ export default function App() {
      * cleanup can now also land before the map object exists at all. */
     let cancelled = false;
     let createdMap: MapboxMap | null = null;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
 
     /* mapbox-gl is ~1.8 MB of JS and ~49 kB of CSS — far more than the rest of the app put
      * together. Loading it here rather than importing it at the top of this file keeps it out
@@ -143,6 +148,16 @@ export default function App() {
       });
       createdMap = newMap;
 
+      /* A request that is opened and never answered — hung proxy, captive portal, a source
+       * whose TileJSON never returns — settles neither `load` nor `error`, so every handler
+       * below stays silent and the spinner would never go away. Mapbox has no request
+       * timeout of its own, so this is the only thing that ends that state. */
+      deadline = setTimeout(() => {
+        if (cancelled) return;
+        console.error(`Map did not finish loading within ${String(MAP_LOAD_DEADLINE_MS)} ms`);
+        setLoadError("Could not load the map. Check your connection and reload the page.");
+      }, MAP_LOAD_DEADLINE_MS);
+
       /* Until `load` fires nothing is in `map`, so the data effect below — which owns the
        * long-lived error handler — has not run yet. Mapbox logs such a failure to the console
        * but nothing reaches the user, so a style that never arrives (expired or invalid token,
@@ -154,20 +169,25 @@ export default function App() {
       };
       newMap.on("error", onPreLoadError);
 
-      /* Hand reporting back as soon as the style itself is in, rather than on `load`. `load`
-       * waits for the first complete frame, so the sprite and glyph requests race it — and one
-       * of those 404ing would flash a fatal overlay over a map that is about to work fine.
-       * Nothing is swallowed afterwards: Mapbox logs unhandled errors itself while no listener
-       * is registered, and the data effect attaches its own. Clearing loadError covers the
-       * case where a pre-style error already reported one; `loading` is untouched, so the
-       * spinner simply resumes until the district data lands. */
+      /* Stop listening once the style itself is in. `load` waits for the first complete frame,
+       * so the sprite and glyph requests race it, and one of those 404ing would report a fatal
+       * error over a map that is about to work fine. Nothing is swallowed afterwards: Mapbox
+       * logs unhandled errors itself while no listener is registered, and the data effect
+       * attaches its own. */
       newMap.once("style.load", () => {
         newMap.off("error", onPreLoadError);
-        if (!cancelled) setLoadError(null);
       });
 
+      /* Clearing happens here and not on `style.load`, which fires even when the style is
+       * broken — an import that fails is reported and then `style.load` follows in the same
+       * tick (mapbox fires ErrorEvent("Failed to load imports") immediately before it).
+       * Clearing there erased the message for a style that had demonstrably failed, leaving
+       * the spinner up for good. `load` only fires once the map really is usable. */
       newMap.on("load", () => {
-        if (!cancelled) setMap(newMap);
+        clearTimeout(deadline);
+        if (cancelled) return;
+        setLoadError(null);
+        setMap(newMap);
       });
     };
 
@@ -181,6 +201,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      clearTimeout(deadline);
       createdMap?.remove();
     };
   }, []);
