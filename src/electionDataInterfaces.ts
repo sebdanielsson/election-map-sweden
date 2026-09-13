@@ -19,34 +19,39 @@ export interface Rostfordelning {
   valdistrikt: Valdistrikt[];
 }
 
+/* Optional members are the ones scripts/trimResults.ts drops. A trimmed district carries
+ * only valdistriktskod and rostfordelning, so declaring the rest required made this type
+ * describe a file the app never receives for a trimmed election — and fetch().json() casts
+ * straight to it, so nothing would have caught the undefined at run time. */
 export interface Valdistrikt {
-  namn: string | null;
-  valdistriktstyp: string | null;
-  rapporteringsTid: string | null;
-  totaltAntalRoster: number | null;
-  antalRostberattigade: number | null;
-  valdeltagandeVallokal: number | null;
+  namn?: string | null;
+  valdistriktstyp?: string | null;
+  rapporteringsTid?: string | null;
+  totaltAntalRoster?: number | null;
+  antalRostberattigade?: number | null;
+  valdeltagandeVallokal?: number | null;
   valdistriktskod: string | null;
-  kommunkod: string | null;
-  lankod: string | null;
-  valomradeskod: string | null;
-  kretskod: string | null;
-  kommunvalkretsNamn: string | null;
-  kommunvalkretsKod: string | null;
-  valdistriktskodForegaendeVal: string | null;
-  totaltAntalRosterForegaendeVal: number | null;
-  antalRostberattigadeForegaendeVal: number | null;
-  valdeltagandeForegaendeVal: number | null;
-  forandringTotaltAntalRoster: number | null;
-  forandringValdeltagande: number | null;
-  forandringAntalRostberattigade: number | null;
-  statusJamforelse: string | null;
+  kommunkod?: string | null;
+  lankod?: string | null;
+  valomradeskod?: string | null;
+  kretskod?: string | null;
+  kommunvalkretsNamn?: string | null;
+  kommunvalkretsKod?: string | null;
+  valdistriktskodForegaendeVal?: string | null;
+  totaltAntalRosterForegaendeVal?: number | null;
+  antalRostberattigadeForegaendeVal?: number | null;
+  valdeltagandeForegaendeVal?: number | null;
+  forandringTotaltAntalRoster?: number | null;
+  forandringValdeltagande?: number | null;
+  forandringAntalRostberattigade?: number | null;
+  statusJamforelse?: string | null;
   rostfordelning: ValdistriktRostfordelning;
 }
 
 export interface ValdistriktRostfordelning {
   rosterPaverkaMandat: RosterPaverkaMandat;
-  rosterEjPaverkaMandat: RosterEjPaverkaMandat;
+  /* Dropped by trimResults — invalid votes are not shown. */
+  rosterEjPaverkaMandat?: RosterEjPaverkaMandat;
   /* rosterOvrigaPartier is NOT here. It is nested inside rosterPaverkaMandat, both in the
    * real files and in Valmyndigheten's spec. It was declared here as well, which made
    * correct code reading the nested location look like a bug. */
@@ -113,9 +118,9 @@ export interface ValomradeRostfordelning {
 }
 
 export interface RosterPaverkaMandat {
-  antalRoster: number | null;
-  antalRosterForegaendeVal: number | null;
-  forandringAntalRoster: number | null;
+  antalRoster?: number | null;
+  antalRosterForegaendeVal?: number | null;
+  forandringAntalRoster?: number | null;
   partiRoster: PartiRoster[];
   rosterOvrigaPartier: RosterOvrigaPartier;
 }

@@ -166,7 +166,21 @@ files.forEach((file) => {
   transformed.push({ path: outputFilePath, data: JSON.stringify(geojson_data), file });
 });
 
+/* Built beside the target and swapped in, rather than written into it. Holding the writes
+ * back until every input passed stopped a *partial* set being written, but it did nothing
+ * about files already there: a run over twenty counties into a directory holding
+ * twenty-one leaves the twenty-first behind, stale, with every check green and a map that
+ * mixes two vintages. Replacing the directory wholesale is the only version of this that
+ * is actually true. */
+const stagingDir = `${outputDir}.staging-${String(process.pid)}`;
+fs.rmSync(stagingDir, { recursive: true, force: true });
+fs.mkdirSync(stagingDir, { recursive: true });
+
 for (const { path: outputFilePath, data, file } of transformed) {
-  fs.writeFileSync(outputFilePath, data);
-  console.log(`Coordinate transformation complete for ${file}. Saved to ${outputFilePath}.`);
+  fs.writeFileSync(path.join(stagingDir, path.basename(outputFilePath)), data);
+  console.log(`Coordinate transformation complete for ${file}.`);
 }
+
+fs.rmSync(outputDir, { recursive: true, force: true });
+fs.renameSync(stagingDir, outputDir);
+console.log(`\nWrote ${String(transformed.length)} files to ${outputDir}`);
