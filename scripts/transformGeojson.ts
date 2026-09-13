@@ -73,7 +73,19 @@ const normaliseProperties = (props: Record<string, unknown> | null): NormalisedD
      * safely: 2653 of the 6312 real 2026 codes begin with a zero, and String(09800110) is
      * "9800110" — a key that silently joins to nothing. Leaving numbers unread means the
      * missing-code guard below fires and the run stops, which is the outcome we want. */
-    return typeof value === "string" && value !== "" ? value : undefined;
+    /* Whitespace disqualifies a code as surely as emptiness does: the app joins geometry to
+     * results on exact string equality, so " 018001" or "018 001" matches nothing and the
+     * polygon renders with no data while every check stays green. Rejected rather than
+     * trimmed — trimming guesses at what was meant, and a join key is not worth guessing at.
+     *
+     * Deliberately NOT a length or digits-only rule. Review suggested enforcing the
+     * documented 8-digit format; the real files disagree. 314 of the districts in both the
+     * 2022 and the 2024 results carry 6-digit codes — the uppsamlingsdistrikt, which collect
+     * early and postal votes — so an 8-digit rule would reject 314 genuine districts per
+     * file. All 7032 real codes checked are digits, but that is an observation about three
+     * elections, not a guarantee worth failing tonight's run over. */
+    if (typeof value !== "string" || value === "" || /\s/.test(value)) return undefined;
+    return value;
   };
 
   const code = read("Valdistriktskod") ?? read("Lkfv") ?? null;

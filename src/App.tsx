@@ -312,7 +312,14 @@ export default function App() {
          * applies. Passing a non-numeric value straight through would make both the `<` and
          * `>=` comparisons false and empty both party groups instead. */
         setThreshold(
-          typeof publishedThreshold === "number" && Number.isFinite(publishedThreshold)
+          /* Range-checked, not merely finite. -1 or 101 are finite numbers that would send
+           * every party to one side of the `< cutoff` / `>= cutoff` split and empty the
+           * other group, instead of falling back to the documented 4%. Both real files
+           * publish 4.0. */
+          typeof publishedThreshold === "number" &&
+            Number.isFinite(publishedThreshold) &&
+            publishedThreshold >= 0 &&
+            publishedThreshold <= 100
             ? publishedThreshold
             : null,
         );

@@ -161,6 +161,18 @@ const trimmed = {
   >,
   valdistrikt: districts.map((district) => {
     const paverkaMandat = district.rostfordelning?.rosterPaverkaMandat;
+    const ovriga = paverkaMandat?.rosterOvrigaPartier;
+    if (
+      ovriga !== undefined &&
+      ovriga !== null &&
+      (typeof ovriga !== "object" || Array.isArray(ovriga))
+    ) {
+      fail(
+        `district ${district.valdistriktskod ?? "(no code)"} has a rosterOvrigaPartier that is ` +
+          `${Array.isArray(ovriga) ? "an array" : typeof ovriga}, not an object — refusing to ` +
+          `publish it as if no one voted for a small party`,
+      );
+    }
     /* An uncounted district legitimately reports an empty partiRoster, so an empty array is
      * fine. A *missing* one is not: `?? []` would turn a schema change, or the wrong file
      * being selected, into an apparently valid snapshot in which every district has no
@@ -195,7 +207,9 @@ const trimmed = {
        * geometry's string key, and it cannot be stringified safely either — 42% of real
        * codes begin with a zero. Left undefined here, the guard below rejects the file. */
       valdistriktskod:
-        typeof district.valdistriktskod === "string" && district.valdistriktskod !== ""
+        typeof district.valdistriktskod === "string" &&
+        district.valdistriktskod !== "" &&
+        !/\s/.test(district.valdistriktskod)
           ? district.valdistriktskod
           : undefined,
       rostfordelning: {
@@ -211,6 +225,10 @@ const trimmed = {
           /* Votes for parties below the reporting threshold are their own bucket, not part
            * of partiRoster. Dropping it would make any "other parties" total computed from
            * partiRoster alone understate the real figure. */
+          /* Checked for shape before it is read. Optional chaining turns a malformed bucket —
+           * a string, an array — into two undefined reads, which numberOrNull then reports as
+           * null, publishing the district as if nobody voted for a small party. Absent stays
+           * legal (the type allows partial files); present-but-not-an-object does not. */
           rosterOvrigaPartier: {
             antalRoster: numberOrNull(
               paverkaMandat?.rosterOvrigaPartier?.antalRoster,
