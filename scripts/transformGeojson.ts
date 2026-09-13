@@ -89,11 +89,22 @@ const normaliseProperties = (props: Record<string, unknown> | null): NormalisedD
      * early and postal votes — so an 8-digit rule would reject 314 genuine districts per
      * file. All 7032 real codes checked are digits, but that is an observation about three
      * elections, not a guarantee worth failing tonight's run over. */
-    if (typeof value !== "string" || value === "" || /\s/.test(value)) return undefined;
+    if (typeof value !== "string" || value === "") return undefined;
     return value;
   };
 
-  const code = read("Valdistriktskod") ?? read("Lkfv") ?? null;
+  /* The whitespace rule belongs to codes alone. It was briefly applied by `read` to every
+   * property, which quietly emptied the names: 189 of 454 real districts are called things
+   * like "Visby Norra", so 42% of them published as `Vdnamn: null` and the map lost their
+   * labels while every count and code check still passed. A join key must match exactly; a
+   * label is just text. */
+  const readCode = (key: string): string | undefined => {
+    const value = read(key);
+    if (value === undefined || /\s/.test(value)) return undefined;
+    return value;
+  };
+
+  const code = readCode("Valdistriktskod") ?? readCode("Lkfv") ?? null;
   const name = read("Valdistriktsnamn") ?? read("Vdnamn") ?? null;
   const kommun = read("Kommun");
   const lan = read("Län") ?? read("Lan");
