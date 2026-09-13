@@ -40,6 +40,7 @@ interface RostfordelningIn {
   valdatum?: string;
   rakningstillfalle?: string;
   senasteUppdateringstid?: string;
+  antalUppdateringar?: number;
   antalValdistriktRaknade?: number;
   antalValdistriktSomSkaRaknas?: number;
   /* Only present in test files: "Om true innehåller filen testdata, annars saknas denna",
@@ -207,6 +208,12 @@ const trimmed = {
   valdatum: source.valdatum,
   rakningstillfalle: source.rakningstillfalle,
   senasteUppdateringstid: source.senasteUppdateringstid,
+  /* The publication counter, kept because it is the only field that actually identifies a
+   * snapshot across the pair of files. `senasteUppdateringstid` looks like the obvious choice
+   * and is not: the real 2022 rostfordelning and mandatfordelning are stamped a second apart
+   * (14:07:27 and 14:07:28), so comparing those would reject a perfectly good pair. The
+   * counter matched in both samples checked — 2026 at 3, 2022 at 1215. */
+  antalUppdateringar: source.antalUppdateringar,
   antalValdistriktRaknade: source.antalValdistriktRaknade,
   antalValdistriktSomSkaRaknas: source.antalValdistriktSomSkaRaknas,
   /* Filled from the districts below; see the Map declaration above. */

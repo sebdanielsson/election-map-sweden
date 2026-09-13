@@ -49,9 +49,14 @@ const DATA_BASE_URL = "https://f001.backblazeb2.com/file/election-map-sweden";
 
 /** Thrown when an election's files are simply not in the bucket yet, as opposed to broken. */
 class NotPublishedError extends Error {
-  constructor(what: string) {
+  /* Which half is missing. Results and boundaries arrive by different routes — results on a
+   * five-minute poll, boundaries from a manual publish — so "no results yet" is the wrong
+   * thing to tell someone whose results are fine and whose map has never been uploaded. */
+  readonly resource: "results" | "boundaries";
+  constructor(what: string, resource: "results" | "boundaries") {
     super(what);
     this.name = "NotPublishedError";
+    this.resource = resource;
   }
 }
 
@@ -95,22 +100,32 @@ const fetchResults = async (election: AppElection): Promise<ElectionResults> => 
        * `max-age=60` lets a browser hold the two independently even on a clean run. The files
        * carry provenance precisely so this can be checked instead of assumed: if they disagree
        * about which election and which counting they describe, they are not one snapshot. */
+      /* The three identity fields are the same all evening — every preliminary snapshot of the
+       * same election carries them — so on their own they caught nothing during exactly the
+       * window they were meant to cover. `antalUppdateringar`, the publication counter, is
+       * what actually distinguishes one snapshot from the next.
+       *
+       * Deliberately not `senasteUppdateringstid`, which looks like the obvious choice and is
+       * not: the real 2022 pair is stamped a second apart (14:07:27 against 14:07:28), so
+       * requiring those to match would reject a perfectly good pair. The counter matched in
+       * both samples checked — 2026 at 3, 2022 at 1215. */
       const sameSnapshot =
         rostfordelning.valtillfalle === mandatfordelning.valtillfalle &&
         rostfordelning.valtyp === mandatfordelning.valtyp &&
-        rostfordelning.rakningstillfalle === mandatfordelning.rakningstillfalle;
+        rostfordelning.rakningstillfalle === mandatfordelning.rakningstillfalle &&
+        rostfordelning.antalUppdateringar === mandatfordelning.antalUppdateringar;
       if (!sameSnapshot) {
         console.warn(
           `Skipping ${counting}: rostfordelning and mandatfordelning describe different ` +
-            `snapshots (${String(rostfordelning.rakningstillfalle)} vs ` +
-            `${String(mandatfordelning.rakningstillfalle)})`,
+            `snapshots (update ${String(rostfordelning.antalUppdateringar)} vs ` +
+            `${String(mandatfordelning.antalUppdateringar)})`,
         );
         continue;
       }
       return { rostfordelning, mandatfordelning, counting };
     }
   }
-  throw new NotPublishedError(election.label);
+  throw new NotPublishedError(election.label, "results");
 };
 
 const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollection[]> => {
@@ -150,7 +165,7 @@ const loadGeoJSONFiles = async (election: AppElection): Promise<FeatureCollectio
    * different message from a few counties failing, because the first is expected before
    * publication and the second is not. */
   if (missing.length === election.geometryFiles.length) {
-    throw new NotPublishedError(`${election.label} (district boundaries)`);
+    throw new NotPublishedError(election.label, "boundaries");
   }
   if (missing.length > 0) {
     throw new Error(
@@ -201,7 +216,11 @@ export default function App() {
     const fromUrl = new URLSearchParams(window.location.search).get("val");
     return electionById(fromUrl)?.id ?? latestElection().id;
   });
-  const [notPublished, setNotPublished] = useState<string | null>(null);
+  const [notPublished, setNotPublished] = useState<{ label: string; resource: string } | null>(
+    null,
+  );
+  /* Bumped by the retry timer below; in the data effect's deps so a bump re-runs it. */
+  const [retryTick, setRetryTick] = useState(0);
   const [counting, setCounting] = useState<string | null>(null);
   const election: AppElection = electionById(electionId) ?? latestElection();
 
@@ -512,7 +531,7 @@ export default function App() {
        * error: it gets its own message and leaves the other elections selectable, rather than
        * telling someone to check a connection that is working fine. */
       if (err instanceof NotPublishedError) {
-        setNotPublished(err.message);
+        setNotPublished({ label: err.message, resource: err.resource });
         setLoading(false);
         return;
       }
@@ -537,7 +556,26 @@ export default function App() {
         if (map.getSource(id)) map.removeSource(id);
       }
     };
-  }, [map, election]);
+  }, [map, election, retryTick]);
+
+  /* Retries while something is unpublished, which is the normal state for hours on election
+   * day. Without this the overlay promised the map would pick up new figures and then never
+   * looked again, so a page opened before publication sat there until someone reloaded it.
+   *
+   * Only runs when there is something to wait for, and stops after an hour: a tab left open
+   * overnight should not poll the bucket until the battery runs out. The published cadence is
+   * about ten minutes, so a minute between attempts is frequent enough to feel immediate and
+   * far short of hammering anything. */
+  useEffect(() => {
+    if (!notPublished) return;
+    if (retryTick >= 60) return;
+    const timer = setTimeout(() => {
+      setRetryTick((tick) => tick + 1);
+    }, 60_000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [notPublished, retryTick]);
 
   /* The abbreviation is what the table shows, but it is blank for most registered parties —
    * 64 of the 100 in the 2024 file. Fall back to the registered name, then to the code, so a
@@ -631,8 +669,10 @@ export default function App() {
         {notPublished && !loadError && (
           <div className="absolute z-50 flex h-full w-full items-center justify-center rounded-xl bg-gray-800/50 p-6 backdrop-blur-md">
             <p role="status" className="max-w-md text-center text-sm text-white">
-              No results have been published for {notPublished} yet. Pick an earlier election above,
-              or wait — the map picks up new figures within about ten minutes of publication.
+              {notPublished.resource === "results"
+                ? `No results have been published for ${notPublished.label} yet.`
+                : `The map boundaries for ${notPublished.label} have not been published yet.`}{" "}
+              Pick an earlier election above, or wait — this page checks again every minute.
             </p>
           </div>
         )}

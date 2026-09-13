@@ -154,7 +154,24 @@ jobs:
           export AWS_DEFAULT_REGION
           echo "Region: $AWS_DEFAULT_REGION"
 
-          dest="${DESTINATION:-$ELECTION}"
+          # Default taken from the app's own registry, not from the election id. They happen to
+          # match for riksdag-2026 and do not for eu-2024, whose geometry has lived under
+          # `EPSG4326` since before this project existed — so defaulting to the id would have
+          # published that election to `data/districts/eu-2024/` and reported success while the
+          # app went on reading the old path. One registry, one answer.
+          if [ -z "${DESTINATION:-}" ]; then
+            dest=$(node --experimental-strip-types -e '
+              import { ELECTIONS } from "./src/elections.ts";
+              const found = ELECTIONS.find((e) => e.id === process.env.ELECTION);
+              if (!found) {
+                console.error(`No app registry entry for ${process.env.ELECTION}`);
+                process.exit(1);
+              }
+              process.stdout.write(found.geometryDir);
+            ')
+          else
+            dest="$DESTINATION"
+          fi
           # The destination is a path segment in a public URL, so it may not wander out of the
           # prefix it is supposed to sit in.
           case "$dest" in
