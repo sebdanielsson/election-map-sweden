@@ -52,6 +52,11 @@ const DATA_BASE_URL = "https://f001.backblazeb2.com/file/election-map-sweden";
  * first results without polling from a tab left open overnight. */
 const RETRY_INTERVAL_MS = 60_000;
 const RETRY_LIMIT = 60;
+/* Half the interval, so two probes can never be in flight at once. A probe that never settles
+ * would otherwise never reach the attempt counter and never schedule the next timer, killing
+ * the retry loop silently — under an overlay still promising a check every minute. fetch()
+ * has no timeout of its own, so the bound has to be supplied. */
+const PROBE_TIMEOUT_MS = 30_000;
 
 /** The bucket is not ready yet, as opposed to broken: wait, retry, do not tell anyone to
  * check their connection. */
@@ -76,8 +81,8 @@ class DataNotReadyError extends Error {
 /* 404 is a fact about the world — Valmyndigheten has not published this counting yet — and has
  * to be distinguishable from a 500 or a dropped connection. Returning null for it lets the
  * caller try the next counting instead of failing the page. */
-const fetchJsonOrNull = async (url: string): Promise<unknown> => {
-  const response = await fetch(url);
+const fetchJsonOrNull = async (url: string, signal?: AbortSignal): Promise<unknown> => {
+  const response = await fetch(url, { signal });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${url} returned HTTP ${String(response.status)}`);
   return response.json();
@@ -123,7 +128,12 @@ export interface ElectionResults {
   counting: string;
 }
 
-const fetchResults = async (election: AppElection): Promise<ElectionResults> => {
+const fetchResults = async (
+  election: AppElection,
+  /* Supplied only by the retry probe, which needs a bound; the initial load keeps the
+   * browser's own behaviour. */
+  signal?: AbortSignal,
+): Promise<ElectionResults> => {
   /* Set when a counting had both halves and they disagreed, so the caller can tell "nothing
    * published" from "published and mid-update". */
   let torn = false;
@@ -131,9 +141,11 @@ const fetchResults = async (election: AppElection): Promise<ElectionResults> => 
     const [rost, mandat] = await Promise.all([
       fetchJsonOrNull(
         `${DATA_BASE_URL}/data/election-results/${resultFileName(election, counting, "rost")}`,
+        signal,
       ),
       fetchJsonOrNull(
         `${DATA_BASE_URL}/data/election-results/${resultFileName(election, counting, "mandat")}`,
+        signal,
       ),
     ]);
     /* Both or neither. The publishing workflow refuses to upload half a snapshot, but the two
@@ -652,17 +664,34 @@ export default function App() {
       void (async () => {
         let rerun: boolean;
         try {
-          await fetchResults(election);
+          await fetchResults(election, AbortSignal.timeout(PROBE_TIMEOUT_MS));
           /* Results are there now, so the expensive rebuild is worth doing. */
           rerun = true;
         } catch (err) {
-          /* Only "not ready" is a reason to go on waiting quietly. A 500, a dropped
-           * connection or a file that cannot state its own provenance is a fault, not a
-           * wait — and the data effect is the one place that classifies a failure and puts a
-           * message on screen. Re-run it so it can. Swallowing these instead left the "no
-           * results published" overlay up through an outage and, an hour later, told the
-           * reader to reload a page whose problem a reload would not fix. */
-          rerun = !(err instanceof DataNotReadyError);
+          if (err instanceof DataNotReadyError) {
+            /* Still not ready, so no rebuild. But *which way* it is not ready can change
+             * between polls: results that were simply absent turn up as a torn pair the
+             * moment the publisher starts writing. Leaving notPublished alone then left the
+             * overlay saying nothing had been published while both halves sat in the bucket
+             * — the exact wrong message the mismatch state was added to stop showing. */
+            if (err.resource !== notPublished.resource) {
+              setNotPublished({ label: err.message, resource: err.resource });
+            }
+            rerun = false;
+          } else if (err instanceof DOMException && err.name === "TimeoutError") {
+            /* The probe outran its bound. Counted like any other quiet minute rather than
+             * paying for a rebuild: a slow network is not an outage, and the point of the
+             * bound is that this path reaches the counter at all. */
+            rerun = false;
+          } else {
+            /* A 500, a dropped connection or a file that cannot state its own provenance is
+             * a fault, not a wait — and the data effect is the one place that classifies a
+             * failure and puts a message on screen. Re-run it so it can. Swallowing these
+             * instead left the "no results published" overlay up through an outage and, an
+             * hour later, told the reader to reload a page whose problem a reload would not
+             * fix. */
+            rerun = true;
+          }
         }
         if (cancelled) return;
         setRetryAttempts((attempts) => attempts + 1);

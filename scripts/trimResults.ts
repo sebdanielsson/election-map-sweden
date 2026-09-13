@@ -177,6 +177,29 @@ if (Object.hasOwn(source, "valdatum") && source.valdatum !== null) {
   }
 }
 
+/* Stricter than the list above, which tolerates an explicit null because the app's types do.
+ * This one field the app requires to be an actual number, because it is the only field that
+ * identifies a snapshot across the pair of files — and two nulls compare equal, which is the
+ * vacuous match the app's pairing check exists to prevent. Checking it here rather than only
+ * there is what keeps the two sides from disagreeing: without it this script could publish a
+ * file the app then refuses, turning a bad upstream field into a broken map instead of a
+ * refused upload. Failing closed leaves the previous good snapshot in the bucket, which is
+ * the better of the two outcomes on election night.
+ *
+ * Verified against real input before requiring it: present and numeric in 2022 riksdag
+ * (1215), 2024 EU (1149) and 2026 riksdag, so this rejects nothing that has been published. */
+if (typeof source.antalUppdateringar !== "number") {
+  /* `null` reported by name rather than as `typeof`, which calls it "object" — the one value
+   * most likely to turn up here is exactly the one that message would describe worst, and
+   * whoever reads it is reading it because publication stopped. */
+  const kind = !Object.hasOwn(source, "antalUppdateringar")
+    ? "absent"
+    : source.antalUppdateringar === null
+      ? "null"
+      : typeof source.antalUppdateringar;
+  provenanceProblems.push(`antalUppdateringar is ${kind}, expected number`);
+}
+
 if (provenanceProblems.length > 0) {
   fail(
     `provenance unusable: ${provenanceProblems.join("; ")} — refusing to publish a snapshot ` +
