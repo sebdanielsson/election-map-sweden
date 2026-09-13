@@ -103,13 +103,15 @@ if (!fs.existsSync(inputDir)) {
   process.exit(1);
 }
 
-/* Before the directory is created, for the same reason as in fetchResults: creating the
- * target first makes an interrupted earlier swap look like nothing to repair, and the
- * commitDir at the end of this script then discards the good previous set as stale. */
+/* Repairs an earlier run that was killed mid-swap. It has to happen before anything else
+ * touches the target, because the repair keys off the target being absent. */
 recoverInterrupted(outputDir);
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
+
+/* The target is deliberately NOT created here. Nothing below writes to it — every file goes
+ * to the staging directory and commitDir installs the validated set, creating the parent
+ * itself — so creating it up front only produced an empty directory when a first run failed
+ * validation. Verified: a county with an uncoded feature exited 1 and still left an empty
+ * output directory behind, which reads as "transformed to nothing" rather than "never ran". */
 
 /* 2024's archives contain .json, 2026's contain .geojson. */
 const files = fs
