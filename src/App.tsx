@@ -280,6 +280,8 @@ export default function App() {
          * at run time — destructuring it type checks and then throws, in dev and build
          * alike. Same reason the map above is constructed off `default`. */
         const { default: mapboxgl } = await import("mapbox-gl");
+        if (cancelled) return;
+
         const tooltip = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
