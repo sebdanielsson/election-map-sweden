@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import proj4 from "proj4";
+import { commitDir, stagingPathFor } from "./publishDir.ts";
 import type { Feature, FeatureCollection, GeometryObject } from "geojson";
 
 /* Five decimal places is about 1 m at this latitude — well under the width of the thinnest
@@ -172,7 +173,7 @@ files.forEach((file) => {
  * twenty-one leaves the twenty-first behind, stale, with every check green and a map that
  * mixes two vintages. Replacing the directory wholesale is the only version of this that
  * is actually true. */
-const stagingDir = `${outputDir}.staging-${String(process.pid)}`;
+const stagingDir = stagingPathFor(outputDir);
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 
@@ -181,6 +182,5 @@ for (const { path: outputFilePath, data, file } of transformed) {
   console.log(`Coordinate transformation complete for ${file}.`);
 }
 
-fs.rmSync(outputDir, { recursive: true, force: true });
-fs.renameSync(stagingDir, outputDir);
+commitDir(stagingDir, outputDir);
 console.log(`\nWrote ${String(transformed.length)} files to ${outputDir}`);

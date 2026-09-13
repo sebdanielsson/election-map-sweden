@@ -4,6 +4,7 @@ import axios from "axios";
 import * as unzipper from "unzipper";
 import { pipeline } from "node:stream/promises";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
+import { commitDir, stagingPathFor } from "./publishDir.ts";
 import { electionIds, getElection } from "./elections.ts";
 
 // Usage: downloadDistricts.ts <election-id> <output-dir>
@@ -26,7 +27,7 @@ const districtsUrls = election.districtUrls;
  * changed at some point — the old file stays, transformGeojson reads it alongside the new
  * ones, and the count check passes because there are now *more* files than expected. A
  * mixed-vintage map, every check green. */
-const stagingDir = `${outputDir}.staging-${String(process.pid)}`;
+const stagingDir = stagingPathFor(outputDir);
 
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
@@ -145,8 +146,7 @@ const downloadAllDistricts = async () => {
 downloadAllDistricts()
   .then(() => {
     // Swap in only once every archive has succeeded.
-    fs.rmSync(outputDir, { recursive: true, force: true });
-    fs.renameSync(stagingDir, outputDir);
+    commitDir(stagingDir, outputDir);
     console.log(
       `\nWrote ${String(geoJsonFilesIn(outputDir).length)} district files to ${outputDir}`,
     );

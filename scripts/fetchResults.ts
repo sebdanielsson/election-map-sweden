@@ -22,6 +22,7 @@
 import { execFileSync } from "node:child_process";
 import * as unzipper from "unzipper";
 import { unsafeArchiveEntries } from "./archiveSafety.ts";
+import { commitDir, stagingPathFor } from "./publishDir.ts";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -199,9 +200,17 @@ const main = async () => {
     }
   }
 
+  /* Swapped in as a directory rather than copied file by file: copying left any JSON from a
+   * previous run sitting beside the new snapshot, and an interruption mid-loop produced
+   * exactly the partial output the staging was meant to prevent. The staging directory is
+   * built next to the target so the rename stays on one filesystem. */
+  const finalStaging = stagingPathFor(outputDir);
+  fs.rmSync(finalStaging, { recursive: true, force: true });
+  fs.mkdirSync(finalStaging, { recursive: true });
   for (const name of fs.readdirSync(stagingDir)) {
-    fs.copyFileSync(path.join(stagingDir, name), path.join(outputDir, name));
+    fs.copyFileSync(path.join(stagingDir, name), path.join(finalStaging, name));
   }
+  commitDir(finalStaging, outputDir);
   fs.rmSync(workDir, { recursive: true, force: true });
   fs.rmSync(keyDir, { recursive: true, force: true });
   console.log(`\nVerified files written to ${outputDir}`);

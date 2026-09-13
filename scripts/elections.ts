@@ -92,7 +92,10 @@ export const getElection = (id: string | undefined): ElectionSource => {
   if (!id) {
     throw new Error(`Missing election id. Known ids: ${electionIds().join(", ")}`);
   }
-  const election = ELECTIONS[id];
+  /* Own properties only: a plain object lookup accepts inherited names, so
+   * getElection("toString") returned Object.prototype.toString and the caller then failed
+   * on a missing districtUrls rather than on the unknown id it actually had. */
+  const election = Object.hasOwn(ELECTIONS, id) ? ELECTIONS[id] : undefined;
   if (!election) {
     throw new Error(`Unknown election "${id}". Known ids: ${electionIds().join(", ")}`);
   }
