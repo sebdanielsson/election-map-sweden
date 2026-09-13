@@ -84,7 +84,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/vercel-cli"
           cd "$RUNNER_TEMP/vercel-cli"
           pnpm init >/dev/null
-          pnpm add vercel@59.16.0
+          # --allow-build because pnpm 12 refuses an install that silently skips a
+          # dependency's build scripts (ERR_PNPM_IGNORED_BUILDS) rather than ignoring them
+          # quietly. Naming vercel permits exactly that one package, which is the whole
+          # dependency set here.
+          pnpm add vercel@59.16.0 --allow-build=vercel
           echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Environment is decided once and reused, so the pull, the build and the deploy cannot
