@@ -49,12 +49,19 @@ const downloadAndExtract = async (url: string) => {
   await pipeline(response.data as NodeJS.ReadableStream, fs.createWriteStream(zipFile));
 
   /* A truncated body that still ends cleanly would slip past pipeline(), so check the size
-   * we were promised against the size we got. */
+   * we were promised against the size we got.
+   *
+   * Only when the body was not compressed in transit. axios decompresses transparently and
+   * deletes `content-encoding` from the parsed headers while leaving `content-length`
+   * describing the *compressed* bytes, so comparing the two would reject a perfectly good
+   * download. rawHeaders still carries the original, so use that to detect the case. */
+  const rawHeaders: string[] = response.request?.res?.rawHeaders ?? [];
+  const wasEncoded = rawHeaders.some((header) => header.toLowerCase() === "content-encoding");
   const expected = Number(response.headers["content-length"]);
   const written = fs.statSync(zipFile).size;
-  if (Number.isFinite(expected) && expected > 0 && written !== expected) {
+  if (!wasEncoded && Number.isFinite(expected) && expected > 0 && written !== expected) {
     throw new Error(
-      `truncated download: expected ${String(expected)} bytes, wrote ${String(written)}`,
+      `size mismatch: Content-Length promised ${String(expected)} bytes, wrote ${String(written)}`,
     );
   }
 

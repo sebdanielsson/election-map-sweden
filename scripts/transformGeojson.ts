@@ -67,9 +67,10 @@ interface NormalisedDistrict {
 const normaliseProperties = (props: Record<string, unknown> | null): NormalisedDistrict => {
   const read = (key: string): string | undefined => {
     const value = props?.[key];
-    /* Numbers are accepted too: a district code published as 10820101 rather than
-     * "10820101" would otherwise be dropped, nulling the join key for a whole county. */
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    /* Strings only, deliberately. A district code published as a number cannot be recovered
+     * safely: 2653 of the 6312 real 2026 codes begin with a zero, and String(09800110) is
+     * "9800110" — a key that silently joins to nothing. Leaving numbers unread means the
+     * missing-code guard below fires and the run stops, which is the outcome we want. */
     return typeof value === "string" && value !== "" ? value : undefined;
   };
 
@@ -136,8 +137,8 @@ files.forEach((file) => {
 
   /* The results side refuses to publish a district with no code; the geometry side is the
    * other half of the same join and had no equivalent check. A property rename upstream, or
-   * a code published as a number rather than a string, would otherwise null every key here
-   * and still report success. */
+   * a code published as a number rather than a string (see read() above), would otherwise
+   * null every key here and still report success. */
   const missingCode = geojson_data.features.filter(
     (feature) => !(feature.properties as NormalisedDistrict | null)?.Lkfv,
   ).length;

@@ -28,7 +28,10 @@ const INDEX_URL =
   process.env.VAL_INDEX_URL ?? "https://resultat.val.se/resultatfiler/val2026/index.md5";
 const CERT_URL = process.env.VAL_CERT_URL ?? "https://resultat.val.se/keys/val-sign-crt.pem";
 /* Which archives to take. Defaults to the riksdag files; widen it for region and kommun. */
-const SELECT = new RegExp(process.env.VAL_SELECT ?? "_RD\\.zip$");
+/* Matches both countings. On election night only `preliminar` archives exist — the
+ * `slutlig` ones do not appear until the final count days later — so a selector pinned to
+ * either one finds nothing for most of the event. */
+const SELECT = new RegExp(process.env.VAL_SELECT ?? "_00_RD\\.zip$");
 
 const outputDir = process.argv[2];
 if (!outputDir) {
@@ -61,6 +64,12 @@ const parseIndex = (body: string): { md5: string; href: string }[] =>
     });
 
 const main = async () => {
+  /* Created up front, before any early return: a consumer counting files in here must be
+   * able to tell "nothing published yet" (empty directory) from "the run died" (no
+   * directory). `find` on a missing directory exits 1, which under `set -euo pipefail`
+   * killed the workflow step on every run before the polls closed. */
+  fs.mkdirSync(outputDir, { recursive: true });
+
   const indexBody = (await get(INDEX_URL)).toString("utf8");
   const entries = parseIndex(indexBody);
 
@@ -75,8 +84,15 @@ const main = async () => {
   console.log(
     `index lists ${String(entries.length)} archives, ${String(wanted.length)} match ${String(SELECT)}`,
   );
-  if (wanted.length === 0)
-    die(`index has ${String(entries.length)} archives but none match ${String(SELECT)}`);
+  if (wanted.length === 0) {
+    /* Not fatal. Before our election's archives appear the index is full of other ones, and
+     * dying here would fail every scheduled run for hours — indistinguishable from a real
+     * verification failure, and precisely during the event this exists for. */
+    console.warn(
+      `::warning::index has ${String(entries.length)} archives but none match ${String(SELECT)} — nothing to do`,
+    );
+    return;
+  }
 
   const cert = await get(CERT_URL);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "valresultat-"));
@@ -84,8 +100,10 @@ const main = async () => {
   fs.writeFileSync(certPath, cert);
   /* Not a root of trust — the certificate comes from the same host as the data, so this
    * proves integrity and provenance-as-served, not that Valmyndigheten signed it. It still
-   * catches an expired or not-yet-valid certificate, which openssl does not check on its
-   * own during `dgst -verify`. Pinning the SPKI hash would be the stronger control. */
+   * catches an *expired* certificate, which openssl does not check during `dgst -verify`.
+   * Note -checkend does not test notBefore, so a not-yet-valid certificate passes here and
+   * would only be caught by its signature failing. Pinning the SPKI hash would be the
+   * stronger control. */
   try {
     execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-checkend", "0"], {
       stdio: "pipe",
@@ -100,7 +118,6 @@ const main = async () => {
     `signing certificate: ${execFileSync("openssl", ["x509", "-in", certPath, "-noout", "-subject"]).toString().trim()}`,
   );
 
-  fs.mkdirSync(outputDir, { recursive: true });
   const base = INDEX_URL.replace(/index\.md5$/, "");
 
   for (const { md5, href } of wanted) {

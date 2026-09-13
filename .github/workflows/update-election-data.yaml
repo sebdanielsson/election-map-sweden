@@ -20,7 +20,8 @@ name: Update election data
 #
 # Optional repository variables:
 #   VAL_ACTIVE_UNTIL    ISO date after which scheduled runs no-op (default 2026-09-27)
-#   VAL_SELECT          regex selecting archives from index.md5 (default: riksdag, final)
+#   VAL_SELECT          regex selecting archives from index.md5 (default: riksdag, both
+#                       the preliminary and the final counting)
 
 permissions:
   contents: read
@@ -34,9 +35,10 @@ on:
   workflow_dispatch:
     inputs:
       select:
-        description: "Regex selecting archives from index.md5"
+        # Deliberately no default: a non-empty default here would always be truthy and
+        # would shadow the VAL_SELECT repository variable on every manual run.
+        description: "Regex selecting archives from index.md5 (blank = riksdag, both countings)"
         required: false
-        default: '_slutlig_00_RD\.zip$'
 
 concurrency:
   # Never let two runs upload at once; a later run would race a half-finished upload.
@@ -60,6 +62,12 @@ jobs:
             echo "active=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          case "$ACTIVE_UNTIL" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            # A typo here would otherwise compare as a plain string and silently leave the
+            # schedule running forever, which is the runaway this guard exists to stop.
+            *) echo "::error::VAL_ACTIVE_UNTIL must be YYYY-MM-DD, got '$ACTIVE_UNTIL'"; exit 1 ;;
+          esac
           if [ "$(date -u +%Y-%m-%d)" \> "$ACTIVE_UNTIL" ]; then
             echo "Past $ACTIVE_UNTIL — scheduled runs are done. Use workflow_dispatch to force one."
             echo "active=false" >> "$GITHUB_OUTPUT"
@@ -100,7 +108,7 @@ jobs:
       - name: Fetch and verify result files
         if: steps.window.outputs.active == 'true'
         env:
-          VAL_SELECT: ${{ inputs.select || vars.VAL_SELECT || '_slutlig_00_RD\.zip$' }}
+          VAL_SELECT: ${{ inputs.select || vars.VAL_SELECT || '_00_RD\.zip$' }}
         run: node --experimental-strip-types scripts/fetchResults.ts verified
 
       - name: Count verified files
@@ -108,7 +116,11 @@ jobs:
         id: check
         run: |
           set -euo pipefail
-          count=$(find verified -maxdepth 1 -name '*.json' 2>/dev/null | wc -l)
+          # fetchResults creates this even when it has nothing to do, but make the step
+          # independent of that: find on a missing directory exits 1 and pipefail would
+          # kill the step before count= was ever written.
+          mkdir -p verified
+          count=$(find verified -maxdepth 1 -name '*.json' | wc -l)
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "Verified files: $count"
 
@@ -124,8 +136,11 @@ jobs:
           # mandatfordelning is a couple of hundred kB and carries the seat allocation and
           # the threshold the app reads, so it ships as published.
           for f in verified/*mandatfordelning*.json; do cp "$f" "publish/$(basename "$f")"; done
-          test -n "$(find publish -maxdepth 1 -name '*.json')" || {
-            echo "::error::Nothing landed in publish/ despite $(ls verified | wc -l) verified files"
+          # Assert the votes landed, not merely that something did: with nullglob an empty
+          # rostfordelning glob makes the loop a no-op, and the copied mandatfordelning
+          # alone would satisfy a bare "is publish/ non-empty" check.
+          test -n "$(find publish -maxdepth 1 -name '*rostfordelning*.json')" || {
+            echo "::error::No rostfordelning in publish/ — refusing to publish seat data without votes"
             exit 1
           }
           ls -la publish
@@ -172,9 +187,12 @@ jobs:
           }
           export AWS_DEFAULT_REGION
           echo "Region: $AWS_DEFAULT_REGION"
-          # mandatfordelning first: the app reads the threshold and party names from it and
-          # the votes from rostfordelning, so if the run dies between the two, the pair the
-          # app sees is the old-vote/old-threshold one rather than a mismatched split.
+          # mandatfordelning first, then rostfordelning. This does NOT make the pair atomic:
+          # `aws s3 cp` overwrites in place, so a run that dies between the two leaves a new
+          # mandatfordelning beside an old rostfordelning, and max-age=60 lets a browser
+          # cache the two independently even on a clean run. Dated object names plus a
+          # pointer flip is the only thing that would actually fix it. The order is kept
+          # because the votes are the larger and later-changing file.
           for f in publish/*mandatfordelning*.json publish/*rostfordelning*.json; do
             aws s3 cp "$f" "s3://$BUCKET/data/election-results/$(basename "$f")" \
               --endpoint-url "$ENDPOINT" \
@@ -184,10 +202,11 @@ jobs:
           done
 
       - name: Summary
-        if: always() && steps.window.outputs.active == 'true'
+        # Not gated on the window output: if the window step itself fails, that output is
+        # empty and the run would finish with no summary at all.
+        if: always() && steps.window.outputs.active != 'false'
         env:
           COUNT: ${{ steps.check.outputs.count }}
-          FETCH: ${{ steps.check.outcome }}
           STATUS: ${{ job.status }}
         run: |
           {
