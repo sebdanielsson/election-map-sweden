@@ -52,7 +52,7 @@ concurrency:
 
 jobs:
   update:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     # fetchResults uses bare fetch() with no timeout, and the concurrency group does not
     # cancel in progress — so a stalled connection would otherwise hold the group for the
     # default six hours and silently drop every queued poll on election night.
@@ -132,7 +132,7 @@ jobs:
           # kill the step before count= was ever written.
           mkdir -p verified
           # The `tr` is belt-and-braces, not a fix: GNU wc does not pad when it reads a pipe
-          # (checked on coreutils 9.4, which is what ubuntu-24.04 ships — `count=0`, length 1),
+          # (checked on coreutils 9.4, as shipped on ubuntu-24.04 — `count=0`, length 1),
           # so the padding review flagged does not occur on this runner. BSD and busybox wc do
           # pad, though, and every condition below compares against the exact string "0", so
           # one pipe buys immunity to ever moving this job off a GNU runner.
