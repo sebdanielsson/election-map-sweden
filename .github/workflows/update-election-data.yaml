@@ -27,16 +27,6 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    # Hourly. The five-minute cadence existed for election night, when the counters moved
-    # every few minutes and the map was worth refreshing that often; past that evening it
-    # is a poll a minute for figures that barely change, and each one downloads and
-    # verifies the whole archive.
-    #
-    # GitHub delays scheduled runs under load, so treat this as "within an hour or so of
-    # publication", not as real time. The window guard below is what eventually stops it
-    # running at all.
-    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       select:
@@ -60,6 +50,11 @@ jobs:
     steps:
       # A scheduled job has no natural end. Without this it would run ~105k times a year,
       # each one a checkout, an install and a request to resultat.val.se.
+      # Dormant while there is no `schedule:` trigger above — nothing but workflow_dispatch
+      # can start this run, and the branch below hands those straight through. Kept rather
+      # than deleted because it is the runaway protection for whenever a schedule comes
+      # back, which it will at the next election, and re-deriving it then is how a poll
+      # gets left running for a year.
       - name: Skip scheduled runs outside the election window
         id: window
         env:
