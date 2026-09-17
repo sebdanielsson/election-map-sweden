@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     # 21 archives, a few hundred MB, plus reprojection of ~6300 districts.
     timeout-minutes: 30
     steps:

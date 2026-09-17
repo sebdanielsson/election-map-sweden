@@ -34,8 +34,8 @@
     "@types/unzipper": "^0.10.11",
     "@vitejs/plugin-react": "^6.1.0",
     "axios": "^1.19.0",
-    "oxc-transform-react": "^0.149.0",
-    "oxfmt": "^0.67.0",
+    "oxc-transform-react": "^0.150.0",
+    "oxfmt": "^0.68.0",
     "oxlint": "^1.79.0",
     "oxlint-tsgolint": "^7.0.2001",
     "proj4": "^2.21.0",
@@ -55,7 +55,7 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "12.4.1",
+      "version": "12.4.2",
       "onFail": "download"
     },
     "runtime": {
@@ -64,5 +64,5 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@12.4.1"
+  "packageManager": "pnpm@12.4.2"
 }
