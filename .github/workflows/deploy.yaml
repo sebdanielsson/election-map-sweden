@@ -199,7 +199,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          url=$(vercel deploy --prebuilt ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
+          # --archive=tgz uploads the output as one archive instead of file by file. The Hobby
+          # plan caps CLI uploads at 5000 files a day across the whole account
+          # ("api-upload-free"), and per-file uploads of Next.js output hit that after a busy
+          # day of deploys.
+          url=$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
           # `vercel deploy` prints the URL on stdout and progress on stderr, so this is the URL
           # and nothing else. Empty means the deploy did not produce one, which is a failure
           # even if the CLI exited 0.
