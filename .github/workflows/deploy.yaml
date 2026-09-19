@@ -74,6 +74,24 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # On pull requests, the exact commit that triggered the run, not GitHub's detached
+          # merge commit: this builds the PR's own head, as Vercel's Git integration did.
+          # Pinned to the event's SHA rather than the branch name, so a push that lands while
+          # this run is queued, or a re-run of an old run, can't deploy a different commit
+          # under this run's deployment. Empty on push and workflow_dispatch, which keeps the
+          # default ref.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # The Vercel CLI reads the deployment's branch and commit message from git. A detached
+      # checkout shows up in Vercel as branch "HEAD", so name the commit after the PR branch.
+      - name: Name the checked-out commit after the PR branch
+        if: github.event_name == 'pull_request'
+        env:
+          # From the environment, not interpolated: branch names can contain shell
+          # metacharacters.
+          HEAD_REF: ${{ github.head_ref }}
+        run: git checkout -B "$HEAD_REF"
 
       - uses: pnpm/setup@v2
         with:
@@ -191,7 +209,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          url=$(vercel deploy --prebuilt ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
+          # --archive=tgz uploads the output as one archive instead of file by file. The Hobby
+          # plan caps CLI uploads at 5000 files a day across the whole account
+          # ("api-upload-free"), and per-file uploads of Next.js output hit that after a busy
+          # day of deploys.
+          url=$(vercel deploy --prebuilt --archive=tgz ${{ steps.target.outputs.prod_flag }} --token="$VERCEL_TOKEN")
           # `vercel deploy` prints the URL on stdout and progress on stderr, so this is the URL
           # and nothing else. Empty means the deploy did not produce one, which is a failure
           # even if the CLI exited 0.
