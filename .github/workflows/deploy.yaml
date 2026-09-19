@@ -74,6 +74,14 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # On pull requests, check out the PR branch by name instead of GitHub's detached
+          # merge commit. The Vercel CLI reads the deployment's branch and commit message
+          # from git, so otherwise every preview shows up as branch "HEAD" with a
+          # "Merge <sha> into <sha>" message. This also builds the PR's own head commit, as
+          # Vercel's Git integration did. Empty on push and workflow_dispatch, which keeps
+          # the default ref.
+          ref: ${{ github.head_ref }}
 
       - uses: pnpm/setup@v2
         with:
