@@ -13,11 +13,13 @@
   ],
   "customManagers": [
     {
-      "description": "Update the pnpm version in devEngines.packageManager. Renovate's npm manager only updates the top-level packageManager field, which these repositories no longer set.",
+      "description": "Update the pnpm version in devEngines.packageManager, and the matching packageManagerDependencies entry in pnpm-lock.yaml (pnpm install --frozen-lockfile fails if they disagree). Renovate's npm manager only updates the top-level packageManager field, which these repositories no longer set. Both files share the pnpm dependency name, so their updates land in one branch.",
       "customType": "regex",
-      "managerFilePatterns": ["/(^|/)package\\.json$/"],
+      "managerFilePatterns": ["/(^|/)package\\.json$/", "/(^|/)pnpm-lock\\.yaml$/"],
       "matchStrings": [
-        "\"packageManager\":\\s*\\{\\s*\"name\":\\s*\"pnpm\",\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""
+        "\"packageManager\":\\s*\\{\\s*\"name\":\\s*\"pnpm\",\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\"",
+        "packageManagerDependencies:\\n\\s+pnpm:\\n\\s+specifier: (?<currentValue>\\S+)",
+        "packageManagerDependencies:\\n\\s+pnpm:\\n\\s+specifier: \\S+\\n\\s+version: (?<currentValue>\\S+)"
       ],
       "depNameTemplate": "pnpm",
       "datasourceTemplate": "npm"
