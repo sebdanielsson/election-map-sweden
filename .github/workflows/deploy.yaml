@@ -4,8 +4,8 @@ name: Deploy
 # Builds here and deploys the result to Vercel, instead of letting Vercel's Git integration
 # build and deploy on every push (`git.deploymentEnabled: false` in vercel.json turns that off).
 #
-# main goes straight to production. Every pull request gets a preview, and its URL is posted
-# once on the PR and updated in place afterwards.
+# main goes straight to production. Every pull request gets a preview, linked from the PR's
+# "View deployment" button through the GitHub environment set on the job.
 #
 # Why this exists: the Git integration deploys on every push with no way to say "not this one".
 # PR #781 pushed 32 commits in an afternoon and burned 32 deployments against a daily cap.
@@ -42,10 +42,19 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 15
+    # Records a GitHub Deployment per run, which is what puts the Environments sidebar, the
+    # "deployed to Preview" PR timeline entry and its "View deployment" button back — the parts
+    # of the Vercel Git integration lost when building moved here. The names match the
+    # environments that integration created, so their history carries on. The condition has to
+    # be restated rather than read from the `target` step: the environment is fixed before any
+    # step runs. `url` is evaluated at the end, so it can use the deploy step's output.
+    environment:
+      name: >-
+        ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        && 'Production' || 'Preview' }}
+      url: ${{ steps.deploy.outputs.url }}
     permissions:
       contents: read
-      # Only for the preview-URL comment below.
-      pull-requests: write
     steps:
       - name: Fail early if the Vercel credentials are missing
         env:
@@ -189,20 +198,6 @@ jobs:
           [ -n "$url" ] || { echo "::error::Deploy returned no URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed to $url"
-
-      # One comment per PR, edited in place: a new comment on every push would bury the
-      # conversation under deployment notices.
-      - name: Comment the preview URL
-        if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v3.0.5
-        with:
-          header: vercel-preview
-          message: |
-            **Preview deployment**
-
-            ${{ steps.deploy.outputs.url }}
-
-            Built and deployed from GitHub Actions (commit ${{ github.sha }}).
 
       - name: Summary
         if: always()
