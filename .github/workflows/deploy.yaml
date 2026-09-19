@@ -75,13 +75,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # On pull requests, check out the PR branch by name instead of GitHub's detached
-          # merge commit. The Vercel CLI reads the deployment's branch and commit message
-          # from git, so otherwise every preview shows up as branch "HEAD" with a
-          # "Merge <sha> into <sha>" message. This also builds the PR's own head commit, as
-          # Vercel's Git integration did. Empty on push and workflow_dispatch, which keeps
-          # the default ref.
-          ref: ${{ github.head_ref }}
+          # On pull requests, the exact commit that triggered the run, not GitHub's detached
+          # merge commit: this builds the PR's own head, as Vercel's Git integration did.
+          # Pinned to the event's SHA rather than the branch name, so a push that lands while
+          # this run is queued, or a re-run of an old run, can't deploy a different commit
+          # under this run's deployment. Empty on push and workflow_dispatch, which keeps the
+          # default ref.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # The Vercel CLI reads the deployment's branch and commit message from git. A detached
+      # checkout shows up in Vercel as branch "HEAD", so name the commit after the PR branch.
+      - name: Name the checked-out commit after the PR branch
+        if: github.event_name == 'pull_request'
+        env:
+          # From the environment, not interpolated: branch names can contain shell
+          # metacharacters.
+          HEAD_REF: ${{ github.head_ref }}
+        run: git checkout -B "$HEAD_REF"
 
       - uses: pnpm/setup@v2
         with:
