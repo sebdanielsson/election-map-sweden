@@ -85,7 +85,7 @@ jobs:
         if: steps.window.outputs.active == 'true'
         uses: actions/checkout@v7
 
-      - uses: pnpm/setup@v2
+      - uses: pnpm/setup@v3
         if: steps.window.outputs.active == 'true'
         with:
           cache: true

@@ -93,7 +93,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: git checkout -B "$HEAD_REF"
 
-      - uses: pnpm/setup@v2
+      - uses: pnpm/setup@v3
         with:
           cache: true
 
