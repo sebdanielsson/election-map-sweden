@@ -27,7 +27,7 @@ jobs:
 
       # Installs pnpm from devEngines.packageManager, Node from devEngines.runtime,
       # and runs pnpm install — so the versions live in package.json, not here.
-      - uses: pnpm/setup@v2
+      - uses: pnpm/setup@v3
         with:
           cache: true
 
