@@ -184,7 +184,7 @@ importers:
     devDependencies:
       '@dotenvx/dotenvx':
         specifier: ^2.21.0
-        version: 2.28.2
+        version: 2.29.0
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0))
@@ -309,8 +309,8 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@dotenvx/dotenvx@2.28.2':
-    resolution: {integrity: sha512-8UZfVEj4rrYQcaq/3Ox7te1qC1znOUOavv6F0BQiGhLLjqaD4xDQ4j3ddla/afC5ukBrnWx3c4RPsh6i1SQUSw==}
+  '@dotenvx/dotenvx@2.29.0':
+    resolution: {integrity: sha512-D3JRlTMcM9ucQyrd+uhDanGCsWo0BQ3pnICtlivHnbblLtzqnGxB/9I8udRwqh77vpvQXnuesOGqQQtUQMGpKA==}
     hasBin: true
 
   '@dotenvx/primitives@3.0.2':
@@ -2284,7 +2284,7 @@ snapshots:
       '@babel/helper-validator-identifier': 7.29.7
     optional: true
 
-  '@dotenvx/dotenvx@2.28.2':
+  '@dotenvx/dotenvx@2.29.0':
     dependencies:
       '@dotenvx/primitives': 3.0.2
       '@dotenvx/tooling': 1.0.3
