@@ -183,7 +183,7 @@ importers:
         version: 19.3.0(react@19.3.0)
     devDependencies:
       '@dotenvx/dotenvx':
-        specifier: ^2.21.0
+        specifier: ^2.30.0
         version: 2.30.0
       '@tailwindcss/vite':
         specifier: ^4.3.3
