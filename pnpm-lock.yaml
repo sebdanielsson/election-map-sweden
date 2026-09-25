@@ -222,7 +222,7 @@ importers:
         specifier: ^1.85.0
         version: 1.85.0(oxlint-tsgolint@7.0.2002)
       oxlint-tsgolint:
-        specifier: ^7.0.2001
+        specifier: ^7.0.2002
         version: 7.0.2002
       proj4:
         specifier: ^2.21.0
