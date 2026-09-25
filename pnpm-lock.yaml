@@ -225,7 +225,7 @@ importers:
         specifier: ^7.0.2002
         version: 7.0.2002
       proj4:
-        specifier: ^2.21.0
+        specifier: ^2.22.0
         version: 2.22.0
       tailwindcss:
         specifier: ^4.3.3
