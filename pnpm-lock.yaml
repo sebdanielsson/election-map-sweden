@@ -210,7 +210,7 @@ importers:
         specifier: ^1.20.0
         version: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       node:
-        specifier: runtime:^24.19.0
+        specifier: runtime:^24.21.0
         version: runtime:24.21.0
       oxc-transform-react:
         specifier: ^0.152.0
