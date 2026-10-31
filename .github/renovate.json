@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": ["github>sebdanielsson/renovate-config"],
   "rangeStrategy": "bump",
   "semanticCommits": "enabled",
   "minimumReleaseAge": "1 day",

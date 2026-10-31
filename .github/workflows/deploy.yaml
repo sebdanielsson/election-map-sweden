@@ -105,7 +105,13 @@ jobs:
         # was committed.
         #
         # Pinned: an unpinned CLI changes how this workflow builds and deploys with no commit
-        # here to explain it.
+        # here to explain it. The version lives in env rather than inline in the script so
+        # Renovate can bump it: its github-actions manager only reads `uses:`, and the
+        # annotation below is matched by customManagers:githubActionsVersions, which
+        # github>sebdanielsson/renovate-config extends.
+        env:
+          # renovate: datasource=npm depName=vercel
+          VERCEL_CLI_VERSION: 59.16.0
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/vercel-cli"
@@ -120,7 +126,7 @@ jobs:
           # minimumReleaseAge is deliberately not set: pnpm's built-in default is already
           # 1440 minutes, so restating it would only create a second place to keep in sync.
           printf 'allowBuilds:\n  vercel: true\n  esbuild: true\n' > pnpm-workspace.yaml
-          pnpm add vercel@59.16.0
+          pnpm add "vercel@$VERCEL_CLI_VERSION"
           echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Environment is decided once and reused, so the pull, the build and the deploy cannot
