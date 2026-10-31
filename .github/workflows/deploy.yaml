@@ -111,7 +111,7 @@ jobs:
         # github>sebdanielsson/renovate-config extends.
         env:
           # renovate: datasource=npm depName=vercel
-          VERCEL_CLI_VERSION: 59.16.0
+          VERCEL_CLI_VERSION: 65.8.0
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/vercel-cli"
