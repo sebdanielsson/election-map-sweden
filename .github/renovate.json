@@ -1,9 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>sebdanielsson/renovate-config"],
-  "rangeStrategy": "bump",
-  "semanticCommits": "enabled",
-  "minimumReleaseAge": "1 day",
   "packageRules": [
     {
       "groupName": "all patch dependencies (manual)",
@@ -32,10 +29,9 @@
       ]
     },
     {
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchCurrentVersion": "!/^0/",
-      "automerge": true,
-      "matchPackageNames": ["!typescript"]
+      "description": "The shared preset automerges stable minor and patch updates. TypeScript doesn't follow semver and its minor releases can break type checking, so review those by hand.",
+      "matchPackageNames": ["typescript"],
+      "automerge": false
     }
   ]
 }
