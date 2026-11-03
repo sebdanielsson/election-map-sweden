@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^2.38.2",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/geojson": "7946.0.16",
     "@types/node": "^26.6.6",
     "@types/react": "19.3.0",
@@ -38,7 +38,7 @@
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
     "proj4": "^2.22.0",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.4",
     "typescript": "~7.0.2",
     "unzipper": "^0.12.5",
     "vite": "^8.3.5"
