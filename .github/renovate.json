@@ -13,7 +13,7 @@
       "groupSlug": "all-patch",
       "matchUpdateTypes": ["patch"],
       "matchCurrentVersion": "!/^0/",
-      "matchPackageNames": ["!typescript"]
+      "matchPackageNames": ["*"]
     },
     {
       "groupName": "oxc",
@@ -27,11 +27,6 @@
         "oxc-**",
         "@oxc-*/**"
       ]
-    },
-    {
-      "description": "The shared preset automerges stable minor and patch updates. TypeScript doesn't follow semver and its minor releases can break type checking, so review those by hand.",
-      "matchPackageNames": ["typescript"],
-      "automerge": false
     }
   ]
 }
