@@ -37,7 +37,7 @@
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
-    "proj4": "^2.22.0",
+    "proj4": "^2.23.0",
     "tailwindcss": "^4.3.5",
     "typescript": "~7.0.2",
     "unzipper": "^0.12.5",
