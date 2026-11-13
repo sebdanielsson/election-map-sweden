@@ -222,8 +222,8 @@ importers:
         specifier: ^7.0.2007
         version: 7.0.2007
       proj4:
-        specifier: ^2.22.0
-        version: 2.22.0
+        specifier: ^2.23.0
+        version: 2.23.0
       tailwindcss:
         specifier: ^4.3.5
         version: 4.3.5
@@ -1438,8 +1438,8 @@ packages:
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
-  proj4@2.22.0:
-    resolution: {integrity: sha512-MVvH09QrYm3A235rcX39WDiCKanrBiblu28l0KYIn/B2DofmYhvP/LLS43kE66jNDfx/P1l/nah3JmsAq8UgbQ==}
+  proj4@2.23.0:
+    resolution: {integrity: sha512-vb1Z/dOztEyXg5JC2LgKc2ye+md4qUdwH/RLS0EUUMKzoIsAC2PT1IGKPIDv9qg51p7uONn93qTh9gtfh+GmOQ==}
     peerDependencies:
       geotiff: '*'
     peerDependenciesMeta:
@@ -1564,8 +1564,8 @@ packages:
       yaml:
         optional: true
 
-  wkt-parser@1.6.0:
-    resolution: {integrity: sha512-O2WMUagkdOKkgcfqZBUauysHVeifCwcs+zUd2QG7UIzVljLwK9g5xHUfL/TkQFwmQ3eF7oHFKGnMcb/kZdvbaw==}
+  wkt-parser@1.9.0:
+    resolution: {integrity: sha512-0muBykCBpbUgMPqmH+2rlvFlFwwH1kdgIMa0YbaQ/JZAlyWCv8Fa4HFSbEvZs2gYRaqJP/0D8xSI1G7Z4tn0vw==}
 
   write-file-atomic@5.0.1:
     resolution: {integrity: sha512-+QU2zd6OTD8XWIJCbffaiQeH9U73qIqafo1x6V1snCWYGJf6cVE0cDR4D8xRzcEnfI21IFrUPzPGtcPf8AC+Rw==}
@@ -2327,10 +2327,10 @@ snapshots:
 
   process-nextick-args@2.0.1: {}
 
-  proj4@2.22.0:
+  proj4@2.23.0:
     dependencies:
       mgrs: 1.0.0
-      wkt-parser: 1.6.0
+      wkt-parser: 1.9.0
 
   proxy-from-env@2.1.0: {}
 
@@ -2446,7 +2446,7 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
 
-  wkt-parser@1.6.0: {}
+  wkt-parser@1.9.0: {}
 
   write-file-atomic@5.0.1:
     dependencies:
