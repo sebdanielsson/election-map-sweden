@@ -211,11 +211,11 @@ importers:
         specifier: ^26.6.10
         version: 26.6.10
       '@types/react':
-        specifier: 19.3.2
-        version: 19.3.2
+        specifier: 19.3.3
+        version: 19.3.3
       '@types/react-dom':
         specifier: 19.3.0
-        version: 19.3.0(@types/react@19.3.2)
+        version: 19.3.0(@types/react@19.3.3)
       '@types/unzipper':
         specifier: ^0.10.11
         version: 0.10.11
@@ -919,8 +919,8 @@ packages:
     peerDependencies:
       '@types/react': ^19.3.0
 
-  '@types/react@19.3.2':
-    resolution: {integrity: sha512-0QJbb58RxWJL3VAa5tvk7QhJamz0S+MpFL2xDuF/+THRR+kldyhPjRZ1iwvK45AEHZ1BVGS3otPsl7QlNVRizQ==}
+  '@types/react@19.3.3':
+    resolution: {integrity: sha512-K8uWpJc4teiuOPdiP1umjeA9rGMgVPiXuoL66fcS1QlwBT1WMqY8PORmub9FadopIs+RCW6siYEs7Lpq+vDlog==}
 
   '@types/unzipper@0.10.11':
     resolution: {integrity: sha512-D25im2zjyMCcgL9ag6N46+wbtJBnXIr7SI4zHf9eJD2Dw2tEB5e+p5MYkrxKIVRscs5QV0EhtU9rgXSPx90oJg==}
@@ -2037,11 +2037,11 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
-  '@types/react-dom@19.3.0(@types/react@19.3.2)':
+  '@types/react-dom@19.3.0(@types/react@19.3.3)':
     dependencies:
-      '@types/react': 19.3.2
+      '@types/react': 19.3.3
 
-  '@types/react@19.3.2':
+  '@types/react@19.3.3':
     dependencies:
       csstype: 3.2.4
 
